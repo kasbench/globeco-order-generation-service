@@ -24,3 +24,24 @@
 1. Creating comprehensive architecture document following Clean Architecture and DDD principles
 2. Adapting structure for Python/FastAPI technology stack
 3. Including specific components for optimization engine, external service integration, and model management
+
+## Prompt: Create Requirements Document
+
+**User Request:** Generate complete requirements for the microservice as @requirements.md, based on @business-requirements.md and @non-functional-requirements.mdc, using @sample-requirements.md as formatting example.
+
+**Actions Taken:**
+1. Creating comprehensive requirements document following sample structure
+2. Incorporating business requirements for models, rebalancing, and optimization
+3. Including non-functional requirements for Python/FastAPI/MongoDB stack
+4. Detailing API specifications, data models, and processing requirements
+
+## Prompt: Create Execution Plan
+
+**User Request:** Generate execution plan as @execution-plan.md using @sample-execution-plan.md as example, following test-driven methodology with checkboxes for tracking progress.
+
+**Actions Taken:**
+1. Creating comprehensive execution plan adapted for Python/FastAPI/MongoDB technology stack
+2. Following test-driven development methodology with tests written before implementation
+3. Structuring phases to prioritize testing framework and domain validation
+4. Including specific deliverables for optimization engine and mathematical validation
+5. Adapting timeline and milestones for investment model management and portfolio rebalancing
