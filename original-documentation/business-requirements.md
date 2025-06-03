@@ -136,12 +136,8 @@ The objective of the optimization problem is to minimize PD subject to the follo
 - MV is a constant.  It cannot change.
 - $\forall i, u_i \in \mathbb{Z}$ (All values of u are integers)
 - $\forall i, u_i \ge 0$ (All values of u are non-negative)
-- $
-\forall i, u_i \cdot p_i \ge MV \cdot (w_i - l_i)
-$
-- $
-\forall i, u_i \cdot p_i \le MV \cdot (w_i + h_i)
-$
+- $\forall i, u_i \cdot p_i \ge MV \cdot (w_i - l_i)$
+- $\forall i, u_i \cdot p_i \le MV \cdot (w_i + h_i)$
 
 ### Processing Steps
 For each portfolio to be rebalanced:
