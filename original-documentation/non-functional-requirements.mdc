@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 - This is a microservice called the "Order Generation Service".  It is a microservice in the GlobeCo suite.  The GlobeCo suite is part of a Kubernetes autoscaling benchmark called KASBench.  This microservice will never be deployed in production.  It is used for benchmarking only.  It contains no production data and does not require security.
 - Name: globeco-order-generation-service
-- Port:
+- Port: 8088
 - Organization: Kasbench
 - Domain: kasbench.org
 - Author: Noah Krieger
@@ -21,6 +21,7 @@ alwaysApply: false
     - Pytest Mongo >=3.2.0
     - Pytest Asyncio >=0.26.0
     - Gunicorn >=23.0.0
+    - CVXPY >=1.6.0
 
 - Database
     - MongoDB

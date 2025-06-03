@@ -163,6 +163,9 @@ For each portfolio to be rebalanced:
 9. For each $i$, create a driftDTO. The securityId is the securityId of $s_i$.  The original quantity is the original value of $u_i$.  The adjusted quantity is $u_i^{'}$.  The target, highDrift, and lowDrift come from the associated model for position $s_i$.  The field actual is calculated as $(u^{'} \cdot p)/MV$ and rounded to 4 decimal places.
 10. Create a RebalanceDTO with the portfolioId, the list of TransactionDTO, and the list of DriftDTO.
 
+**Note**: Rebalances may be parallelized up to the number of available threads, unless configured differently.  It should be possible to change configuration easily.  
+
+**Note**: In this version of the service, Orders are not sent directly to the Order Service.  They will be returned to the API caller (generally a UI) which will decide what to do.
 
 
 
@@ -296,3 +299,13 @@ The slice requirements will be implemented in a second phase.
     }
 
     ```
+
+## Error Handling
+
+1. If the solver fails to find a solution or is still processing after 30 seconds, return an HTTP 422 status code with the message that "no feasible solution exists."  The 30 second timeout must be easily configuarable.
+
+2. For all external services, retry 3 times.  The timeout and number of retries must be easily configurable.  
+
+3. The Portfolio Accounting and Pricing Services are required for rebalancing.  If either service is unavailable even after retries, return an appropriate error and error message.  If a service is unavailable for one rebalance it is likely unavailable for all, so terminate after the first failed rebalance.
+
+

@@ -4,9 +4,7 @@ globs:
 alwaysApply: true
 ---
 - Documents in the @original-documentation folder are human-written.  These documents should be read but not updated.
-- Documentation that you generate should be placed in the @ai-generated-documentation folder.
 - Follow a test-driven methodology.  I will review tests before we start coding the implementation.  Tests should cover the business and non-functional requirements as documented in [business-requirements.md](mdc:original-documentation/business-requirements.md) and [non-functional-requirements.md](mdc:original-documentation/non-functional-requirements.md).
 - Document each prompt and the actions you took in response to the prompt in [cursor-logs.md](mdc:cursor-logs.md).
-- You will be asked to write the [execution-plan.md](mdc:ai-generated-documentation/execution-plan.md) document.  Use [sample-execution-plan.md](mdc:original-documentation/sample-execution-plan.md) as a guide for formatting and content.  Note that [sample-execution-plan.md](mdc:original-documentation/sample-execution-plan.md) was developed for a Go application and this is a Python application.  Consequently, the technology choices will be different.  However, the types of activities in [execution-plan.md](mdc:ai-generated-documentation/execution-plan.md) should mirror the sample plan.
-- As you complete steps in the [execution-plan.md](mdc:ai-generated-documentation/execution-plan.md), check off the check boxes
+
 
