@@ -13,16 +13,16 @@ from datetime import datetime
 def create_test_model(
     name: str = "Test Model",
     positions: Optional[List[Dict[str, Any]]] = None,
-    portfolios: Optional[List[str]] = None
+    portfolios: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Create a test investment model with default values.
-    
+
     Args:
         name: Model name
         positions: List of position dictionaries
         portfolios: List of portfolio IDs
-        
+
     Returns:
         Dictionary containing model data
     """
@@ -39,12 +39,12 @@ def create_test_model(
                 "target": Decimal("0.35"),
                 "highDrift": Decimal("0.03"),
                 "lowDrift": Decimal("0.03"),
-            }
+            },
         ]
-    
+
     if portfolios is None:
         portfolios = ["683b6d88a29ee10e8b499643"]
-    
+
     return {
         "name": name,
         "positions": positions,
@@ -57,7 +57,7 @@ def create_test_model(
 async def cleanup_test_data(database) -> None:
     """
     Clean up test data from the database.
-    
+
     Args:
         database: MongoDB database instance
     """
@@ -70,63 +70,60 @@ async def cleanup_test_data(database) -> None:
 def validate_model_data(model_data: Dict[str, Any]) -> bool:
     """
     Validate that model data conforms to expected structure.
-    
+
     Args:
         model_data: Model data dictionary
-        
+
     Returns:
         True if valid, False otherwise
     """
     required_fields = ["name", "positions", "portfolios"]
-    
+
     # Check required fields
     for field in required_fields:
         if field not in model_data:
             return False
-    
+
     # Validate positions
     if not isinstance(model_data["positions"], list):
         return False
-    
+
     for position in model_data["positions"]:
         position_fields = ["securityId", "target", "highDrift", "lowDrift"]
         for field in position_fields:
             if field not in position:
                 return False
-        
+
         # Validate constraints
         target = position["target"]
         high_drift = position["highDrift"]
         low_drift = position["lowDrift"]
-        
+
         if not (0 <= target <= 1):
             return False
         if not (0 <= low_drift <= high_drift <= 1):
             return False
-    
+
     # Validate target sum
     target_sum = sum(pos["target"] for pos in model_data["positions"])
     if target_sum > Decimal("0.95"):
         return False
-    
+
     return True
 
 
 def create_test_portfolio_balance(
-    security_id: str,
-    quantity: int,
-    price: Decimal,
-    is_cash: bool = False
+    security_id: str, quantity: int, price: Decimal, is_cash: bool = False
 ) -> Dict[str, Any]:
     """
     Create a test portfolio balance entry.
-    
+
     Args:
         security_id: Security identifier
         quantity: Number of shares/units
         price: Price per share/unit
         is_cash: Whether this is a cash position
-        
+
     Returns:
         Dictionary containing balance data
     """
@@ -135,10 +132,10 @@ def create_test_portfolio_balance(
         "quantity": quantity,
         "marketValue": Decimal(quantity) * price,
     }
-    
+
     if is_cash:
         balance["cash"] = True
-    
+
     return balance
 
 
@@ -146,23 +143,23 @@ def create_test_transaction(
     transaction_type: str,
     security_id: str,
     quantity: int,
-    trade_date: Optional[datetime] = None
+    trade_date: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """
     Create a test transaction.
-    
+
     Args:
         transaction_type: "BUY" or "SELL"
         security_id: Security identifier
         quantity: Transaction quantity
         trade_date: Trade date (defaults to now)
-        
+
     Returns:
         Dictionary containing transaction data
     """
     if trade_date is None:
         trade_date = datetime.now()
-    
+
     return {
         "transactionType": transaction_type,
         "securityId": security_id,
@@ -174,10 +171,10 @@ def create_test_transaction(
 def calculate_portfolio_total_value(positions: List[Dict[str, Any]]) -> Decimal:
     """
     Calculate total portfolio value from positions.
-    
+
     Args:
         positions: List of position dictionaries
-        
+
     Returns:
         Total portfolio market value
     """
@@ -187,15 +184,15 @@ def calculate_portfolio_total_value(positions: List[Dict[str, Any]]) -> Decimal:
 def normalize_decimal_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize decimal values in a dictionary for comparison.
-    
+
     Args:
         data: Dictionary that may contain Decimal values
-        
+
     Returns:
         Dictionary with normalized Decimal values
     """
     normalized = {}
-    
+
     for key, value in data.items():
         if isinstance(value, Decimal):
             normalized[key] = value.quantize(Decimal("0.0001"))
@@ -208,7 +205,7 @@ def normalize_decimal_dict(data: Dict[str, Any]) -> Dict[str, Any]:
             ]
         else:
             normalized[key] = value
-    
+
     return normalized
 
 
@@ -216,17 +213,17 @@ def mock_external_service_response(
     service_name: str,
     success: bool = True,
     data: Any = None,
-    error_message: str = "Service error"
+    error_message: str = "Service error",
 ) -> Dict[str, Any]:
     """
     Create a mock response for external service calls.
-    
+
     Args:
         service_name: Name of the service
         success: Whether the response indicates success
         data: Response data
         error_message: Error message for failed responses
-        
+
     Returns:
         Mock response dictionary
     """
@@ -249,19 +246,19 @@ def mock_external_service_response(
 def setup_test_logging(level: str = "DEBUG") -> None:
     """
     Set up logging for tests.
-    
+
     Args:
         level: Log level to use for tests
     """
     import logging
-    
+
     logging.basicConfig(
         level=getattr(logging, level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        force=True  # Override existing configuration
+        force=True,  # Override existing configuration
     )
-    
+
     # Reduce noise from third-party libraries
     logging.getLogger("motor").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("cvxpy").setLevel(logging.WARNING) 
+    logging.getLogger("cvxpy").setLevel(logging.WARNING)

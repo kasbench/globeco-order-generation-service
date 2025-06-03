@@ -26,13 +26,13 @@ from src.main import create_app
 # Test settings override
 class TestSettings(Settings):
     """Test-specific settings with safe defaults."""
-    
+
     database_name: str = "test-order-generation"
     debug: bool = True
     log_level: str = "DEBUG"
     optimization_timeout: int = 5  # Shorter timeout for tests
     external_service_timeout: int = 1  # Shorter timeout for tests
-    
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -47,7 +47,7 @@ async def mongodb_container():
     """Start a MongoDB test container for integration tests."""
     if os.getenv("SKIP_MONGODB_TESTS"):
         pytest.skip("MongoDB tests skipped")
-    
+
     with MongoDbContainer("mongo:8.0") as mongodb:
         yield mongodb
 
@@ -66,7 +66,9 @@ async def test_settings(test_database_url):
 
 
 @pytest.fixture
-async def test_db_client(test_settings: TestSettings) -> AsyncGenerator[AsyncIOMotorClient, None]:
+async def test_db_client(
+    test_settings: TestSettings,
+) -> AsyncGenerator[AsyncIOMotorClient, None]:
     """Create a test database client."""
     client = AsyncIOMotorClient(test_settings.database_url)
     try:
@@ -76,17 +78,19 @@ async def test_db_client(test_settings: TestSettings) -> AsyncGenerator[AsyncIOM
 
 
 @pytest.fixture
-async def test_database(test_db_client: AsyncIOMotorClient, test_settings: TestSettings) -> AsyncGenerator[AsyncIOMotorDatabase, None]:
+async def test_database(
+    test_db_client: AsyncIOMotorClient, test_settings: TestSettings
+) -> AsyncGenerator[AsyncIOMotorDatabase, None]:
     """Create a clean test database for each test."""
     database = test_db_client[test_settings.database_name]
-    
+
     # Clean up any existing data
     collection_names = await database.list_collection_names()
     for collection_name in collection_names:
         await database[collection_name].drop()
-    
+
     yield database
-    
+
     # Clean up after test
     collection_names = await database.list_collection_names()
     for collection_name in collection_names:
@@ -102,13 +106,19 @@ def mock_external_services():
         "portfolio_client": AsyncMock(),
         "security_client": AsyncMock(),
     }
-    
+
     # Configure default return values
     mocks["portfolio_accounting_client"].get_portfolio_balances.return_value = []
     mocks["pricing_client"].get_security_prices.return_value = {}
-    mocks["portfolio_client"].get_portfolio.return_value = {"id": "test", "name": "Test Portfolio"}
-    mocks["security_client"].get_security.return_value = {"id": "test", "name": "Test Security"}
-    
+    mocks["portfolio_client"].get_portfolio.return_value = {
+        "id": "test",
+        "name": "Test Portfolio",
+    }
+    mocks["security_client"].get_security.return_value = {
+        "id": "test",
+        "name": "Test Security",
+    }
+
     return mocks
 
 
@@ -130,7 +140,7 @@ def sample_portfolio_balances():
             "cash": True,
             "quantity": 1,
             "marketValue": Decimal("2500.00"),
-        }
+        },
     ]
 
 
@@ -160,7 +170,7 @@ def sample_investment_model():
                 "target": Decimal("0.35"),
                 "highDrift": Decimal("0.03"),
                 "lowDrift": Decimal("0.03"),
-            }
+            },
         ],
         "portfolios": ["683b6d88a29ee10e8b499643"],
     }
@@ -184,12 +194,12 @@ def sample_investment_models():
                     "target": Decimal("0.25"),
                     "highDrift": Decimal("0.03"),
                     "lowDrift": Decimal("0.03"),
-                }
+                },
             ],
             "portfolios": ["683b6d88a29ee10e8b499643"],
         },
         {
-            "name": "Aggressive Model", 
+            "name": "Aggressive Model",
             "positions": [
                 {
                     "securityId": "683b6b9620f302c879a5fef4",
@@ -198,29 +208,30 @@ def sample_investment_models():
                     "lowDrift": Decimal("0.10"),
                 },
                 {
-                    "securityId": "683b6b9620f302c879a5fef5", 
+                    "securityId": "683b6b9620f302c879a5fef5",
                     "target": Decimal("0.55"),
                     "highDrift": Decimal("0.08"),
                     "lowDrift": Decimal("0.08"),
-                }
+                },
             ],
             "portfolios": ["683b6d88a29ee10e8b499644"],
-        }
+        },
     ]
 
 
 @pytest.fixture
 async def test_app(test_settings: TestSettings):
     """Create a test FastAPI application."""
+
     # Override settings for testing
     def get_test_settings():
         return test_settings
-    
+
     app = create_app()
     app.dependency_overrides[get_settings] = get_test_settings
-    
+
     yield app
-    
+
     # Clean up
     app.dependency_overrides.clear()
 
@@ -232,7 +243,7 @@ async def test_client(test_app):
         yield client
 
 
-@pytest.fixture 
+@pytest.fixture
 async def async_test_client(test_app):
     """Create an async test client for the FastAPI application."""
     async with AsyncClient(app=test_app, base_url="http://testserver") as client:
@@ -259,7 +270,8 @@ def complex_optimization_problem():
     num_positions = 20
     return {
         "current_quantities": [100] * num_positions,
-        "target_percentages": [0.04] * num_positions,  # 20 positions at 4% each = 80%, 20% cash
+        "target_percentages": [0.04]
+        * num_positions,  # 20 positions at 4% each = 80%, 20% cash
         "prices": [50.0 + i * 10 for i in range(num_positions)],
         "market_value": 100000.0,
         "low_drifts": [0.02] * num_positions,
@@ -280,20 +292,22 @@ def add_markers(request):
 # Test utilities
 class TestUtils:
     """Utility class for common test operations."""
-    
+
     @staticmethod
     def assert_decimal_equal(actual: Decimal, expected: Decimal, places: int = 4):
         """Assert that two decimal values are equal within specified precision."""
-        assert abs(actual - expected) < Decimal(f"1e-{places}"), f"Expected {expected}, got {actual}"
-    
+        assert abs(actual - expected) < Decimal(
+            f"1e-{places}"
+        ), f"Expected {expected}, got {actual}"
+
     @staticmethod
     def assert_optimization_constraints_satisfied(
-        quantities: List[int], 
-        prices: List[Decimal], 
+        quantities: List[int],
+        prices: List[Decimal],
         target_percentages: List[Decimal],
         market_value: Decimal,
         low_drifts: List[Decimal],
-        high_drifts: List[Decimal]
+        high_drifts: List[Decimal],
     ):
         """Assert that optimization result satisfies all constraints."""
         for i, (qty, price, target, low_drift, high_drift) in enumerate(
@@ -303,7 +317,7 @@ class TestUtils:
             target_value = market_value * target
             lower_bound = market_value * (target - low_drift)
             upper_bound = market_value * (target + high_drift)
-            
+
             assert lower_bound <= position_value <= upper_bound, (
                 f"Position {i} constraint violated: "
                 f"value={position_value}, bounds=[{lower_bound}, {upper_bound}]"
@@ -313,4 +327,4 @@ class TestUtils:
 @pytest.fixture
 def test_utils():
     """Provide test utilities."""
-    return TestUtils 
+    return TestUtils
