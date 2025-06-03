@@ -127,7 +127,7 @@ Portfolio drift, $PD$ is defined as
 
 $$
 \begin{equation}
-PD = \sum_{i=1}^N | (MV \cdot t_i) - (u_i \cdot p_i) |
+PD = \sum_{i=1}^N |(MV \cdot t_i) - (u_i \cdot p_i)|
 \end{equation}
 $$
 
