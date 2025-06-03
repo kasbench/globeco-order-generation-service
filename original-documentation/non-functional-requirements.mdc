@@ -1,0 +1,42 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+- This is a microservice called the "Order Generation Service".  It is a microservice in the GlobeCo suite.  The GlobeCo suite is part of a Kubernetes autoscaling benchmark called KASBench.  This microservice will never be deployed in production.  It is used for benchmarking only.  It contains no production data and does not require security.
+- Name: globeco-order-generation-service
+- Port:
+- Organization: Kasbench
+- Domain: kasbench.org
+- Author: Noah Krieger
+- Author email: noah@kasbench.org
+- License: Apache 2.0
+
+- Software:
+    - Python 13
+    - MongoDB 8.0
+    - Beanie >=1.29
+    - FastAPI >=0.115.12
+    - Pytest >=8.35
+    - Pytest Mongo >=3.2.0
+    - Pytest Asyncio >=0.26.0
+    - Gunicorn >=23.0.0
+
+- Database
+    - MongoDB
+    - Host: globeco-order-generation-service-mongodb
+    - Port: 27017
+    - Database: order-generation
+    - Collection: models
+    - Create the database and collection if they don't already exist
+
+- The design should be robust and fault-tolerant.  Employ rate-limiting, back-pressure, and circuit breakers where appropriate to avoid failures and degrade gracefully.
+- Expose health checks for Kubernetes
+- Expose a swagger-ui endpoint
+- Configure CORS for all origins
+- This microservice will be run in the latest version of Kubernetes.
+- The Kubernetes namespace is `globeco`.  You do not need to create it.
+- Configure a GitHub action to build and deploy to Docker Hub as kasbench/globeco-order-generation-service.  It must be a multi-architecture build for AMD64 and ARM64, both for Linux.
+- Thoroughly document the application in README.md
+- When developing a plan in [execution-plan.md](mdc:ai-generated-documentation/execution-plan.md), include checkboxes for each step.
+

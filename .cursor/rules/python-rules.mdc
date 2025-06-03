@@ -1,0 +1,59 @@
+---
+description: 
+globs: *.py
+alwaysApply: false
+---
+- Use type hints for all functions and classes
+- Use [Google-style doc strings](https://google.github.io/styleguide/pyguide.html) for all functions and classes.
+- The project uses `uv`.  uv is already configured.
+- The project uses a virtual environment (.venv).  The virtual environment has already been created
+- The project uses git.  The local and remote git repo has already been created (https://github.com/kasbench/globeco-order-generation-service)
+- Use comments for any non-obvious code.
+- Strive for code consistency.  Review the code before making changes so that new code is consistent with existing code.
+- The project should use `black` for formatting and `ruff` for linting.
+- Strive to resolve all linter messages.
+- Use the following structure.  I have already created the src directory.
+```
+globeco-order-generation-service/
+├── src/
+│   ├── main.py          # FastAPI application entry point
+│   ├── config.py        # Configuration settings
+│   ├── core/           # Core application logic
+│   │   ├── exceptions.py  # Custom exceptions
+│   │   ├── security.py    # Security related logic
+│   │   ├── utils.py       # Utility functions
+│   │   └── __init__.py
+│   ├── api/            # API endpoints
+│   │   ├── routers/      # Sub-routers for different resources
+│   │   │   ├── users.py
+│   │   │   ├── items.py
+│   │   │   └── __init__.py
+│   │   ├── dependencies.py # Router dependencies
+│   │   └── __init__.py
+│   ├── schemas/         # Pydantic models for request/response validation
+│   │   ├── users.py
+│   │   ├── items.py
+│   │   └── __init__.py
+│   ├── models/          # Database models
+│   │   ├── users.py
+│   │   ├── items.py
+│   │   └── __init__.py
+│   ├── services/        # Business logic
+│   │   ├── user_service.py
+│   │   ├── item_service.py
+│   │   └── __init__.py
+│   ├── database/        # Database interaction logic
+│   │   ├── database.py   # Database connection and session handling
+│   │   └── __init__.py
+│   ├── tests/           # Tests
+│   │   ├── test_main.py
+│   │   └── __init__.py
+│   └── __init__.py
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
+```
+- Use testcontainers for mongodb.  Mock external services for testing.
+
+
