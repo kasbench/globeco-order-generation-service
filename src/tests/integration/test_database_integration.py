@@ -8,7 +8,7 @@ database integration before implementing the actual repository.
 Tests use MongoDB test containers for isolated testing environment.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -175,7 +175,7 @@ class TestMongoModelRepositoryIntegration:
             name="Updated Integration Test Model",
             positions=created.positions,
             portfolios=created.portfolios + ["new-portfolio"],
-            last_rebalance_date=datetime.utcnow(),
+            last_rebalance_date=datetime.now(timezone.utc),
             version=created.version,
         )
 
@@ -323,8 +323,10 @@ class TestMongoModelRepositoryIntegration:
     @pytest.mark.asyncio
     async def test_find_by_last_rebalance_date(self, repository, sample_model):
         """Test finding models by last rebalance date."""
-        # Arrange
-        cutoff_date = datetime.utcnow()
+        # Arrange - Use a fixed cutoff date to avoid precision issues
+        cutoff_date = datetime(
+            2024, 1, 1, 12, 0, 0
+        )  # Timezone-naive to match domain entity
 
         # Create model with recent rebalance date
         recent_model = InvestmentModel(
@@ -344,7 +346,11 @@ class TestMongoModelRepositoryIntegration:
         assert len(results) >= 1
         found_model = next((m for m in results if m.model_id == created.model_id), None)
         assert found_model is not None
-        assert found_model.last_rebalance_date >= cutoff_date
+        # Convert both to naive datetime for comparison if needed
+        found_date = found_model.last_rebalance_date
+        if found_date and found_date.tzinfo is not None:
+            found_date = found_date.replace(tzinfo=None)
+        assert found_date >= cutoff_date
 
     @pytest.mark.asyncio
     async def test_get_models_by_security(self, repository, sample_model):

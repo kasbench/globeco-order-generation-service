@@ -6,7 +6,7 @@ for MongoDB persistence, using Beanie ODM for document operations.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from beanie.exceptions import DocumentNotFound
@@ -329,7 +329,7 @@ class MongoModelRepository(ModelRepository):
             List[InvestmentModel]: List of models needing rebalancing
         """
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=days_threshold)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_threshold)
 
             # Find models with no rebalance date or old rebalance date
             documents = (

@@ -5,7 +5,7 @@ This module defines the MongoDB document structure using Beanie ODM
 for investment models and their associated positions.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, List, Optional
 
@@ -124,8 +124,8 @@ class ModelDocument(Document):
         None, description="Last rebalancing timestamp"
     )
     version: int = Field(default=1, description="Version for optimistic locking")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator('name')
     @classmethod
@@ -214,7 +214,7 @@ class ModelDocument(Document):
             portfolios=model.portfolios.copy(),
             last_rebalance_date=model.last_rebalance_date,
             version=model.version,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(timezone.utc),
         )
 
     def update_from_domain_model(self, model: InvestmentModel) -> None:
@@ -226,7 +226,7 @@ class ModelDocument(Document):
         self.portfolios = model.portfolios.copy()
         self.last_rebalance_date = model.last_rebalance_date
         self.version = model.version
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     class Settings:
         """Beanie document settings."""

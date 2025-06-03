@@ -72,7 +72,7 @@ async def test_db_client(
         yield client
     finally:
         if client is not None:
-            await client.close()
+            client.close()  # Motor's close() is synchronous, not async
 
 
 @pytest_asyncio.fixture
