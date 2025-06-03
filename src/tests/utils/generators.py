@@ -5,9 +5,9 @@ This module provides functions to generate realistic test data for
 portfolios, securities, prices, and investment models.
 """
 
+import random
 from datetime import datetime
 from decimal import Decimal
-import random
 from typing import Any
 
 
@@ -241,7 +241,9 @@ def generate_investment_model(
             else:
                 target = Decimal(
                     str(random.uniform(float(min_target), float(max_target)))
-                ).quantize(Decimal("0.005"))  # Round to 0.5% increments
+                ).quantize(
+                    Decimal("0.005")
+                )  # Round to 0.5% increments
 
         targets.append(target)
         remaining_target -= target

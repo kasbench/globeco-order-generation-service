@@ -6,13 +6,14 @@ to determine if the service is alive and ready to serve traffic.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.config import Settings, get_settings
-from src.core.utils import get_correlation_id, get_logger
+from src.core.utils import get_correlation_id, get_logger, create_response_metadata
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -26,8 +27,8 @@ class HealthStatus(BaseModel):
     service: str
     version: str
     correlation_id: str
-    checks: dict[str, Any]
-    uptime_seconds: float | None = None
+    checks: Dict[str, Any]
+    uptime_seconds: Optional[float] = None
 
 
 class HealthCheck:
@@ -36,7 +37,7 @@ class HealthCheck:
     def __init__(self):
         self.start_time = datetime.utcnow()
 
-    async def check_database(self) -> dict[str, Any]:
+    async def check_database(self) -> Dict[str, Any]:
         """
         Check database connectivity.
 
@@ -59,7 +60,7 @@ class HealthCheck:
                 "response_time_ms": None,
             }
 
-    async def check_external_services(self) -> dict[str, Any]:
+    async def check_external_services(self) -> Dict[str, Any]:
         """
         Check external service connectivity.
 
@@ -102,7 +103,7 @@ class HealthCheck:
             "services": service_status,
         }
 
-    async def check_optimization_engine(self) -> dict[str, Any]:
+    async def check_optimization_engine(self) -> Dict[str, Any]:
         """
         Check optimization engine availability.
 
@@ -227,18 +228,30 @@ async def liveness_probe(settings: Settings = Depends(get_settings)) -> HealthSt
         )
 
         if health_status.status == "unhealthy":
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Service is not alive",
+                content={
+                    "error": {
+                        "code": "SERVICE_UNAVAILABLE",
+                        "message": "Service is not alive",
+                        **create_response_metadata(),
+                    }
+                },
             )
 
         return health_status
 
     except Exception as e:
         logger.error("Liveness probe failed", error=str(e))
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Liveness check failed: {e}",
+            content={
+                "error": {
+                    "code": "SERVICE_UNAVAILABLE",
+                    "message": f"Liveness check failed: {e}",
+                    **create_response_metadata(),
+                }
+            },
         )
 
 
@@ -275,18 +288,30 @@ async def readiness_probe(settings: Settings = Depends(get_settings)) -> HealthS
             )
 
             if not (external_degraded and database_healthy):
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Service is not ready",
+                    content={
+                        "error": {
+                            "code": "SERVICE_UNAVAILABLE",
+                            "message": "Service is not ready",
+                            **create_response_metadata(),
+                        }
+                    },
                 )
 
         return health_status
 
     except Exception as e:
         logger.error("Readiness probe failed", error=str(e))
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Readiness check failed: {e}",
+            content={
+                "error": {
+                    "code": "SERVICE_UNAVAILABLE",
+                    "message": f"Readiness check failed: {e}",
+                    **create_response_metadata(),
+                }
+            },
         )
 
 

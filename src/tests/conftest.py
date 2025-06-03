@@ -7,15 +7,15 @@ and sample test data.
 """
 
 import asyncio
+import os
 from collections.abc import AsyncGenerator
 from decimal import Decimal
-import os
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-import pytest
 from testcontainers.mongodb import MongoDbContainer
 
 from src.config import Settings, get_settings
@@ -295,9 +295,9 @@ class TestUtils:
     @staticmethod
     def assert_decimal_equal(actual: Decimal, expected: Decimal, places: int = 4):
         """Assert that two decimal values are equal within specified precision."""
-        assert abs(actual - expected) < Decimal(f"1e-{places}"), (
-            f"Expected {expected}, got {actual}"
-        )
+        assert abs(actual - expected) < Decimal(
+            f"1e-{places}"
+        ), f"Expected {expected}, got {actual}"
 
     @staticmethod
     def assert_optimization_constraints_satisfied(

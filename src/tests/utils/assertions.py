@@ -66,9 +66,9 @@ def assert_optimization_valid(
 
     # Check that all quantities are non-negative integers
     for i, qty in enumerate(quantities):
-        assert isinstance(qty, int) and qty >= 0, (
-            f"Quantity {i} must be non-negative integer: {qty}"
-        )
+        assert (
+            isinstance(qty, int) and qty >= 0
+        ), f"Quantity {i} must be non-negative integer: {qty}"
 
     # Check drift constraints for each position
     total_position_value = Decimal("0")
@@ -128,15 +128,15 @@ def assert_portfolio_weights_valid(
     for security_id, position in positions.items():
         if "marketValue" in position:
             weight = position["marketValue"] / total_market_value
-            assert Decimal("0") <= weight <= Decimal("1") + tolerance, (
-                f"Invalid weight for {security_id}: {weight}"
-            )
+            assert (
+                Decimal("0") <= weight <= Decimal("1") + tolerance
+            ), f"Invalid weight for {security_id}: {weight}"
             total_weight += weight
 
     # Total weights should not exceed 100% (plus tolerance)
-    assert total_weight <= Decimal("1") + tolerance, (
-        f"Total portfolio weights exceed 100%: {total_weight}"
-    )
+    assert (
+        total_weight <= Decimal("1") + tolerance
+    ), f"Total portfolio weights exceed 100%: {total_weight}"
 
 
 def assert_transactions_valid(transactions: list[dict[str, Any]]) -> None:
@@ -153,9 +153,9 @@ def assert_transactions_valid(transactions: list[dict[str, Any]]) -> None:
         # Check required fields
         required_fields = ["transactionType", "securityId", "quantity", "tradeDate"]
         for field in required_fields:
-            assert field in transaction, (
-                f"Transaction {i} missing required field: {field}"
-            )
+            assert (
+                field in transaction
+            ), f"Transaction {i} missing required field: {field}"
 
         # Check transaction type
         assert transaction["transactionType"] in [
@@ -165,15 +165,15 @@ def assert_transactions_valid(transactions: list[dict[str, Any]]) -> None:
 
         # Check quantity is positive integer
         quantity = transaction["quantity"]
-        assert isinstance(quantity, int) and quantity > 0, (
-            f"Transaction {i} has invalid quantity: {quantity}"
-        )
+        assert (
+            isinstance(quantity, int) and quantity > 0
+        ), f"Transaction {i} has invalid quantity: {quantity}"
 
         # Check security ID format (24 character hex string)
         security_id = transaction["securityId"]
-        assert isinstance(security_id, str) and len(security_id) == 24, (
-            f"Transaction {i} has invalid securityId: {security_id}"
-        )
+        assert (
+            isinstance(security_id, str) and len(security_id) == 24
+        ), f"Transaction {i} has invalid securityId: {security_id}"
 
 
 def assert_mathematical_precision(
@@ -191,9 +191,9 @@ def assert_mathematical_precision(
         AssertionError: If precision is not sufficient
     """
     if expected_value == 0:
-        assert abs(calculated_value) < relative_tolerance, (
-            f"Expected zero, got {calculated_value}"
-        )
+        assert (
+            abs(calculated_value) < relative_tolerance
+        ), f"Expected zero, got {calculated_value}"
     else:
         relative_error = abs((calculated_value - expected_value) / expected_value)
         assert relative_error < relative_tolerance, (
@@ -224,12 +224,12 @@ def assert_optimization_convergence(
     ], f"Optimization did not converge: status={status}"
 
     if "num_iterations" in optimization_result:
-        assert optimization_result["num_iterations"] <= max_iterations, (
-            f"Optimization took too many iterations: {optimization_result['num_iterations']}"
-        )
+        assert (
+            optimization_result["num_iterations"] <= max_iterations
+        ), f"Optimization took too many iterations: {optimization_result['num_iterations']}"
 
     if "objective_value" in optimization_result:
         objective_value = optimization_result["objective_value"]
-        assert not np.isnan(objective_value) and not np.isinf(objective_value), (
-            f"Invalid objective value: {objective_value}"
-        )
+        assert not np.isnan(objective_value) and not np.isinf(
+            objective_value
+        ), f"Invalid objective value: {objective_value}"
