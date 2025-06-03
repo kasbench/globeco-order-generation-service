@@ -39,4 +39,15 @@ alwaysApply: false
 - Configure a GitHub action to build and deploy to Docker Hub as kasbench/globeco-order-generation-service.  It must be a multi-architecture build for AMD64 and ARM64, both for Linux.
 - Thoroughly document the application in README.md
 - When developing a plan in [execution-plan.md](mdc:ai-generated-documentation/execution-plan.md), include checkboxes for each step.
+- The Order Generation Service follows **Clean Architecture** principles with **Domain-Driven Design (DDD)** patterns. The service is designed as a microservice with clear separation of concerns, ensuring maintainability, testability, and scalability.
+
+
+### Architecture Principles
+
+1. **Dependency Inversion** - High-level modules don't depend on low-level modules
+2. **Single Responsibility** - Each layer has a single, well-defined purpose
+3. **Interface Segregation** - Clean contracts between layers
+4. **Domain-Centric Design** - Business logic isolated from infrastructure concerns
+5. **Idempotency** - Safe to retry operations without side effects
+
 

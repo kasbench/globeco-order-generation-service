@@ -77,7 +77,7 @@ Collection: models
 
 - ModelPortfolioDTO: [portfolioId]
 
-- RebalanceDTO: PortfolioId, [TransactionDTO]
+- RebalanceDTO: PortfolioId, [TransactionDTO], [DriftDTO]
     
 - TransactionDTO
     | Field Name | Data Type | Description |
@@ -87,7 +87,16 @@ Collection: models
     | quantity | Integer | Positive quantity to BUY or SELL
     | tradeDate | Date | Current date (no time) 
 
-
+- DriftDTO
+    | Field Name | Data Type | Description |
+    | --- | --- | --- |
+    | securityId| String | 
+    | originalQuantity | Decimal128 | Original value of $u$ |
+    | adjustedQuantity | Decimal128 | New value of $u^{'}$
+    | target | Decimal128 | Target from the model
+    | highDrift | Decimal128 | High drift from the model
+    | lowDrift | Decimal128 | Low drift from the model
+    | actual | Decimal128 | $(u^{'} \cdot p)/MV$
 
 
 ### APIs
@@ -113,7 +122,7 @@ Prefix: api/v1/
 
 ## Rebalancer Requirements
 
-Rebalancing the portfolio is a non-linear optimization problem.  Let $N$ be the number of positions in a model, let $u_i$ be the the number of units of position $i$, for all $i \in \{1, 2, \cdots, N\}$.  Let $p_i$ be the price of each unit of position $i$.  And let $w_i$, $l_i$, and $h_i$, be the target weight, low drift, and high drift, respectively.
+Rebalancing the portfolio is a non-linear optimization problem.  Let $N$ be the number of security positions in a model, let $s_i$ be the security and $u_i$ be the the number of units of security position $i$, for all $i \in \{1, 2, \cdots, N\}$.  Let $p_i$ be the price of each unit of position $i$.  And let $w_i$, $l_i$, and $h_i$, be the target weight, low drift, and high drift, respectively.
 
 The market value, $MV$ of the portfolio is expressed as.
 
@@ -131,9 +140,10 @@ PD = \sum_{i=1}^N |(MV \cdot t_i) - (u_i \cdot p_i)|
 \end{equation}
 $$
 
-The objective of the optimization problem is to minimize PD subject to the following constraints:
+The objective of the optimization problem is to find the values of $u_1, u_2, \cdots, u_n$ that  minimize PD subject to the following constraints:
 
 - MV is a constant.  It cannot change.
+- $p_1, p_2, \cdots , p_n$ are constants.  They cannot change.
 - $\forall i, u_i \in \mathbb{Z}$ (All values of u are integers)
 - $\forall i, u_i \ge 0$ (All values of u are non-negative)
 - $\forall i, u_i \cdot p_i \ge MV \cdot (w_i - l_i)$
@@ -149,9 +159,9 @@ For each portfolio to be rebalanced:
 5. Calculate MV according to equation 2.  This value is a constant.  Cash is the obtained from the position record without a securityId (null securityId).  Assume that the price is 1, so total cash is the value of the quantity returned.
 6. Solve the non-linear optimization problem by minimizing equation 2.  If there are multiple solutions, pick one at random.  
 7. The solution in step 6 will provide new values of $u$.  Let's call these new values $u_i^{'}$ and the original values $u_i$.  Calculate $\Delta_i = u_i^{'} - u_i$
-8. For each $i$, create a TransactionDTO.  If $\Delta_i$ is greater than 0, the transactionType is BUY; if less than 0, it is SELL.  If $\Delta_i$ is 0, skip it without creating a TransactionDTO.  The securityId is the security of position $i$, the quantity is the absolute value of $\Delta_i$.  The tradeDate is the current systems date.
-9. Create a RebalanceDTO with the portfolioId and the list of TransactionDTO.
-
+8. For each $i$, create a TransactionDTO.  If $\Delta_i$ is greater than 0, the transactionType is BUY; if less than 0, it is SELL.  If $\Delta_i$ is 0, skip it without creating a TransactionDTO.  The securityId is the security of $s_i$, the quantity is the absolute value of $\Delta_i$.  The tradeDate is the current systems date.
+9. For each $i$, create a driftDTO. The securityId is the securityId of $s_i$.  The original quantity is the original value of $u_i$.  The adjusted quantity is $u_i^{'}$.  The target, highDrift, and lowDrift come from the associated model for position $s_i$.  The field actual is calculated as $(u^{'} \cdot p)/MV$ and rounded to 4 decimal places.
+10. Create a RebalanceDTO with the portfolioId, the list of TransactionDTO, and the list of DriftDTO.
 
 
 
