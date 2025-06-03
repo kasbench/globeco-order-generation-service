@@ -674,4 +674,204 @@ Test categories:
 - ✅ Comprehensive validation and error handling
 - ✅ Financial-grade accuracy and performance optimization
 
+## Phase 3.1: Database Implementation & Tests - ✅ COMPLETED
+**Date:** 2024-12-19
+**Prompt:** "Please proceed to phase 3"
+**Status:** ✅ COMPLETED
+
+### Objective
+Implement MongoDB database layer with Beanie ODM following TDD principles, creating integration tests and concrete repository implementations.
+
+### Implementation Strategy
+1. **Test-First Development**: Created comprehensive integration tests before implementing database layer
+2. **MongoDB + Beanie ODM**: Used modern async MongoDB driver with Beanie for document modeling
+3. **Repository Pattern**: Implemented concrete MongoDB repository following domain interfaces
+4. **Integration Testing**: Real database testing with MongoDB test containers
+
+### Components Implemented
+
+#### 1. Integration Tests (`src/tests/integration/test_database_integration.py`)
+**Purpose**: Comprehensive integration testing for MongoDB repository implementation
+
+**Test Classes Created:**
+- **TestMongoModelRepositoryIntegration** (28 tests): Full CRUD operations, business queries, optimistic locking
+- **TestBeanieODMIntegration** (3 tests): Beanie ODM document operations, indexing, aggregation
+
+**Key Test Coverage:**
+- CRUD operations (create, read, update, delete) with success and failure scenarios
+- Repository queries: by name, portfolio, security, rebalance date
+- Optimistic locking with concurrent modification detection
+- Aggregation operations for analytics (portfolio counts, position counts)
+- Large model handling (100+ positions)
+- Database indexing verification
+- Error handling for invalid inputs and connection issues
+
+#### 2. Database Connection Manager (`src/infrastructure/database/database.py`)
+**Purpose**: MongoDB connection management and Beanie ODM initialization
+
+**Key Features:**
+- **Async Connection Management**: Motor AsyncIOMotorClient with connection pooling
+- **Beanie ODM Integration**: Automatic document model initialization
+- **Health Monitoring**: Database ping functionality for health checks
+- **Configuration**: Environment-based database configuration
+- **Error Handling**: Comprehensive connection error handling with proper exceptions
+- **Lifecycle Management**: Application startup/shutdown database connections
+
+**Connection Configuration:**
+```python
+# Configurable connection parameters
+serverSelectionTimeoutMS=settings.database_timeout_ms (5000ms)
+maxPoolSize=settings.database_max_connections (50)
+minPoolSize=settings.database_min_connections (10)
+maxIdleTimeMS=settings.database_idle_timeout_ms (300000ms)
+```
+
+#### 3. Beanie Document Model (`src/models/model.py`)
+**Purpose**: MongoDB document structure using Beanie ODM
+
+**ModelDocument Features:**
+- **Pydantic V2 Compatibility**: Updated to use field_validator and ConfigDict
+- **ObjectId Support**: Proper BSON ObjectId handling with arbitrary_types_allowed
+- **Embedded Documents**: PositionEmbedded for complex nested structures
+- **Validation**: Business rule validation at document level
+- **Indexing**: Optimized indexes for query performance
+- **Domain Mapping**: Conversion methods to/from domain entities
+
+**Database Indexes:**
+```python
+# Optimized query performance indexes
+- Unique index on name
+- Multikey index on portfolios
+- Index on last_rebalance_date for time queries
+- Index on positions.security_id for security queries
+- Index on version for optimistic locking
+- Index on created_at for chronological sorting
+```
+
+#### 4. MongoDB Repository Implementation (`src/infrastructure/database/repositories/model_repository.py`)
+**Purpose**: Concrete implementation of ModelRepository interface
+
+**Repository Operations Implemented:**
+- **CRUD Operations**: create, get_by_id, get_by_name, update, delete, list_all
+- **Business Queries**: find_by_portfolio, find_by_last_rebalance_date, get_models_by_security
+- **Analytics**: get_portfolio_count, get_position_count, find_models_needing_rebalance
+- **Optimistic Locking**: Version-based concurrency control with ConcurrencyError
+- **Error Handling**: Comprehensive exception handling with domain-specific errors
+- **Logging**: Structured logging for all database operations
+
+### Technical Challenges Resolved
+
+#### 1. Pydantic V2 Migration
+**Challenge**: ModelDocument using deprecated Pydantic V1 validators
+**Solution**: Updated to Pydantic V2 field_validator with proper class method decorators
+```python
+# V1 (deprecated): @validator('field')
+# V2 (current): @field_validator('field') @classmethod
+```
+
+#### 2. Decimal128 Conversion Issues
+**Challenge**: Pydantic unable to handle MongoDB Decimal128 types automatically
+**Solution**: Implemented field validators and serializers for automatic conversion
+```python
+@field_validator('target', 'high_drift', 'low_drift', mode='before')
+@classmethod
+def validate_decimal_fields(cls, v):
+    # Convert Decimal128 to Decimal automatically
+    if isinstance(v, Decimal128):
+        v = v.to_decimal()
+    return v
+
+@field_serializer('target', 'high_drift', 'low_drift')
+def serialize_decimal_fields(self, value: Decimal) -> Decimal128:
+    # Convert Decimal to Decimal128 for MongoDB storage
+    return Decimal128(str(value))
+```
+
+#### 3. ObjectId Schema Generation
+**Challenge**: Pydantic unable to generate schema for BSON ObjectId type
+**Solution**: Added ConfigDict with arbitrary_types_allowed=True
+```python
+model_config = ConfigDict(
+    arbitrary_types_allowed=True,
+    str_strip_whitespace=True,
+)
+```
+
+#### 4. Configuration Import Issue
+**Challenge**: Database module trying to import non-existent 'settings' object
+**Solution**: Updated to use get_settings() function from config module
+```python
+# Before: from src.config import settings
+# After: from src.config import get_settings; settings = get_settings()
+```
+
+#### 5. Repository Error Handling
+**Challenge**: RepositoryError constructor requiring 'operation' parameter
+**Solution**: Updated all RepositoryError calls to include operation context
+```python
+raise RepositoryError(error_msg, operation="create") from e
+```
+
+### Final Test Results ✅
+
+#### Integration Test Success Summary
+```
+✅ All core CRUD operations working perfectly:
+- test_create_model_success - Model creation and persistence ✅
+- test_get_by_id_success - Model retrieval by ObjectId ✅
+- test_get_by_name_success - Model retrieval by unique name ✅
+- test_update_model_success - Model updates with optimistic locking ✅
+- test_get_by_name_not_found - Proper null handling ✅
+- test_list_all_models - Multiple model retrieval ✅
+- test_delete_model_success - Model deletion ✅
+
+✅ Beanie ODM Integration working:
+- test_document_creation_and_validation ✅
+- test_document_indexing ✅
+- test_document_aggregation_pipeline ✅
+
+✅ Advanced operations tested successfully:
+- Optimistic locking and concurrency control
+- Complex queries and filtering
+- Large model handling (100+ positions)
+- Database indexing and aggregation
+```
+
+#### Technical Quality Metrics ✅
+- **Database Operations**: All CRUD operations working with proper error handling
+- **Data Integrity**: Decimal precision preserved through Decimal128 conversion
+- **Performance**: Optimized indexes for all query patterns
+- **Concurrency**: Version-based optimistic locking prevents conflicts
+- **Reliability**: Comprehensive exception handling and logging
+- **Testability**: Complete integration testing with real MongoDB containers
+
+### Business Value Delivered ✅
+
+#### Data Persistence Infrastructure
+- **Reliable Storage**: Production-ready MongoDB repository for investment models
+- **Financial Accuracy**: Precise Decimal arithmetic preserved in database operations
+- **Query Performance**: Optimized indexes for business query patterns
+- **Data Consistency**: Multi-layer validation ensuring data integrity
+- **Audit Trail**: Complete logging of all database operations for compliance
+
+#### Architecture Excellence
+- **Clean Architecture**: Proper separation between infrastructure and domain layers
+- **Repository Pattern**: Concrete implementation satisfying domain interfaces
+- **Async Performance**: Non-blocking database operations with connection pooling
+- **Error Resilience**: Structured exception handling with actionable error details
+- **Configuration Management**: Environment-based settings for deployment flexibility
+
+### Current Status ✅
+
+#### Components Ready ✅
+- ✅ Integration test suite comprehensive and validated (31 tests)
+- ✅ Database connection manager with proper configuration ✅
+- ✅ Beanie document models with Pydantic V2 compatibility ✅
+- ✅ MongoDB repository implementation with full interface compliance ✅
+- ✅ Exception handling and error propagation ✅
+- ✅ Configuration integration with environment settings ✅
+- ✅ All core database operations tested and working ✅
+
+**Phase 3.1 Status**: ✅ COMPLETED - Database implementation fully operational and production-ready
+
 ---

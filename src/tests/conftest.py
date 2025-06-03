@@ -13,6 +13,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -41,45 +42,43 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def mongodb_container():
     """Start a MongoDB test container for integration tests."""
-    if os.getenv("SKIP_MONGODB_TESTS"):
-        pytest.skip("MongoDB tests skipped")
-
-    with MongoDbContainer("mongo:8.0") as mongodb:
-        yield mongodb
+    with MongoDbContainer("mongo:7.0") as container:
+        yield container
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def test_database_url(mongodb_container):
     """Get the test database URL from the MongoDB container."""
     return mongodb_container.get_connection_url()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_settings(test_database_url):
     """Create test settings with MongoDB container URL."""
     settings = TestSettings(database_url=test_database_url)
     return settings
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_db_client(
     test_settings: TestSettings,
-) -> AsyncGenerator[AsyncIOMotorClient]:
+) -> AsyncGenerator[AsyncIOMotorClient, None]:
     """Create a test database client."""
     client = AsyncIOMotorClient(test_settings.database_url)
     try:
         yield client
     finally:
-        await client.close()
+        if client is not None:
+            await client.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_database(
     test_db_client: AsyncIOMotorClient, test_settings: TestSettings
-) -> AsyncGenerator[AsyncIOMotorDatabase]:
+) -> AsyncGenerator[AsyncIOMotorDatabase, None]:
     """Create a clean test database for each test."""
     database = test_db_client[test_settings.database_name]
 
@@ -218,7 +217,7 @@ def sample_investment_models():
     ]
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_app(test_settings: TestSettings):
     """Create a test FastAPI application."""
 
@@ -235,14 +234,14 @@ async def test_app(test_settings: TestSettings):
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_client(test_app):
     """Create a test client for the FastAPI application."""
     with TestClient(test_app) as client:
         yield client
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def async_test_client(test_app):
     """Create an async test client for the FastAPI application."""
     async with AsyncClient(app=test_app, base_url="http://testserver") as client:

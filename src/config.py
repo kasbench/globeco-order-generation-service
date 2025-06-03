@@ -5,8 +5,8 @@ This module provides environment-based configuration using Pydantic Settings,
 allowing for easy configuration management across different deployment environments.
 """
 
-from functools import lru_cache
 import logging
+from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,13 +43,19 @@ class Settings(BaseSettings):
         default="mongodb://localhost:27017", description="MongoDB connection URL"
     )
     database_name: str = Field(
-        default="order-generation", description="MongoDB database name"
+        default="globeco_order_generation", description="Database name"
     )
-    database_min_connections: int = Field(
-        default=10, description="Minimum database connections"
+    database_timeout_ms: int = Field(
+        default=5000, description="Database connection timeout in milliseconds"
     )
     database_max_connections: int = Field(
-        default=50, description="Maximum database connections"
+        default=50, description="Maximum database connections in pool"
+    )
+    database_min_connections: int = Field(
+        default=10, description="Minimum database connections in pool"
+    )
+    database_idle_timeout_ms: int = Field(
+        default=300000, description="Database connection idle timeout in milliseconds"
     )
 
     # External Service URLs

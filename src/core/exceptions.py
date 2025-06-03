@@ -5,7 +5,7 @@ This module defines custom exception classes for different types of errors
 that can occur in the investment management system.
 """
 
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 class ServiceException(Exception):
@@ -429,3 +429,14 @@ class InvalidDriftBoundsError(BusinessRuleViolationError):
         )
         if security_id:
             self.details["security_id"] = security_id
+
+
+class DatabaseConnectionError(ServiceException):
+    """Exception raised when database connection fails."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            error_code="DATABASE_CONNECTION_ERROR",
+            details=details or {},
+        )
