@@ -277,7 +277,7 @@ class TestDriftCalculatorInterface:
     async def test_calculate_position_drift(self, mock_drift_calculator):
         """Test individual position drift calculation."""
         # Arrange
-        security_id = "STOCK1234567890123456789"
+        # security_id = "STOCK1234567890123456789"
         current_value = Decimal("25000")
         target_percentage = Decimal("0.30")
         market_value = Decimal("100000")
