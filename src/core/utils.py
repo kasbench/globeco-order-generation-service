@@ -5,20 +5,18 @@ This module provides common utility functions including structured logging,
 correlation ID management, and other cross-cutting concerns.
 """
 
-import logging
-import uuid
 from contextvars import ContextVar
-from decimal import Decimal
-from typing import Any, Dict, Optional, Union
-import structlog
 from datetime import datetime
+from decimal import Decimal
 import json
+import logging
+from typing import Any
+import uuid
 
+import structlog
 
 # Context variable for correlation ID
-correlation_id_var: ContextVar[Optional[str]] = ContextVar(
-    'correlation_id', default=None
-)
+correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
 def get_correlation_id() -> str:
@@ -129,7 +127,7 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def safe_decimal_conversion(value: Union[str, int, float, Decimal]) -> Decimal:
+def safe_decimal_conversion(value: str | int | float | Decimal) -> Decimal:
     """
     Safely convert a value to Decimal with proper error handling.
 
@@ -166,7 +164,7 @@ def round_decimal(value: Decimal, places: int = 4) -> Decimal:
     Returns:
         Rounded decimal value
     """
-    quantize_value = Decimal('0.1') ** places
+    quantize_value = Decimal("0.1") ** places
     return value.quantize(quantize_value)
 
 
@@ -261,7 +259,7 @@ def truncate_string(text: str, max_length: int = 50) -> str:
     return text[: max_length - 3] + "..."
 
 
-def deep_merge_dicts(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, Any]:
+def deep_merge_dicts(dict1: dict[str, Any], dict2: dict[str, Any]) -> dict[str, Any]:
     """
     Deep merge two dictionaries.
 
@@ -328,7 +326,7 @@ def sanitize_for_logging(data: Any, max_depth: int = 3) -> Any:
         return data
 
 
-def create_response_metadata() -> Dict[str, Any]:
+def create_response_metadata() -> dict[str, Any]:
     """
     Create standard response metadata.
 

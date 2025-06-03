@@ -1,10 +1,8 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: true
 ---
 - Documents in the @original-documentation folder are human-written.  These documents should be read but not updated.
 - Follow a test-driven methodology.  I will review tests before we start coding the implementation.  Tests should cover the business and non-functional requirements as documented in [business-requirements.md](mdc:original-documentation/business-requirements.md) and [non-functional-requirements.md](mdc:original-documentation/non-functional-requirements.md).
 - Document each prompt and the actions you took in response to the prompt in [cursor-logs.md](mdc:cursor-logs.md).
-
-

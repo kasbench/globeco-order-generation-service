@@ -2,15 +2,15 @@
 
 ## Project Timeline Overview
 
-**Total Estimated Duration:** 8-10 weeks  
-**Team Size:** 1-2 developers  
-**Delivery Model:** Test-driven iterative development with weekly milestones  
+**Total Estimated Duration:** 8-10 weeks
+**Team Size:** 1-2 developers
+**Delivery Model:** Test-driven iterative development with weekly milestones
 **Methodology:** Test-First Development (TDD) with comprehensive mathematical validation
 
 ## Phase 1: Foundation & Testing Infrastructure (Week 1)
 
 ### 1.1 Project Initialization ✅ COMPLETED
-**Duration:** 1-2 days  
+**Duration:** 1-2 days
 **Dependencies:** None
 
 #### Deliverables:
@@ -68,8 +68,8 @@ mypy = ">=1.7.0"
 - ✅ FastAPI application loads successfully
 
 ### 1.2 Testing Framework Setup ✅ COMPLETED
-**Duration:** 2-3 days  
-**Dependencies:** Project initialization  
+**Duration:** 2-3 days
+**Dependencies:** Project initialization
 **TDD Priority:** HIGH
 
 #### Deliverables:
@@ -93,11 +93,11 @@ mypy = ">=1.7.0"
 @pytest.fixture
 async def test_db():
     """MongoDB test database using test containers."""
-    
+
 @pytest.fixture
 async def mock_external_services():
     """Mock all external service dependencies."""
-    
+
 @pytest.fixture
 def sample_investment_models():
     """Sample investment models for testing."""
@@ -115,7 +115,7 @@ def sample_investment_models():
 - ✅ Test-driven development framework ready for domain layer
 
 ### 1.3 Core Configuration & Logging
-**Duration:** 1-2 days  
+**Duration:** 1-2 days
 **Dependencies:** Testing framework
 
 #### Deliverables:
@@ -134,8 +134,8 @@ def sample_investment_models():
 ## Phase 2: Domain Layer with TDD (Week 2)
 
 ### 2.1 Domain Models & Tests
-**Duration:** 3-4 days  
-**Dependencies:** Testing infrastructure  
+**Duration:** 3-4 days
+**Dependencies:** Testing infrastructure
 **TDD Approach:** Write tests first, then implement models
 
 #### Test Deliverables (Write First):
@@ -168,20 +168,20 @@ def sample_investment_models():
 ```python
 def test_investment_model_validates_target_sum_not_exceeding_95_percent():
     """Test that model validates position targets sum ≤ 0.95"""
-    
+
 def test_position_target_must_be_multiple_of_0_005():
     """Test target percentage precision requirement"""
-    
+
 def test_model_removes_zero_target_positions():
     """Test automatic cleanup of positions with 0 target"""
-    
+
 def test_security_uniqueness_within_model():
     """Test that no duplicate securities exist in model"""
 ```
 
 ### 2.2 Repository Interfaces & Tests
-**Duration:** 2-3 days  
-**Dependencies:** Domain models  
+**Duration:** 2-3 days
+**Dependencies:** Domain models
 **TDD Approach:** Define repository contracts through tests
 
 #### Test Deliverables (Write First):
@@ -202,8 +202,8 @@ def test_security_uniqueness_within_model():
 - `src/domain/repositories/base_repository.py`
 
 ### 2.3 Domain Services & Mathematical Validation
-**Duration:** 2-3 days  
-**Dependencies:** Repository interfaces  
+**Duration:** 2-3 days
+**Dependencies:** Repository interfaces
 **TDD Approach:** Mathematical correctness through comprehensive testing
 
 #### Test Deliverables (Write First):
@@ -223,10 +223,10 @@ def test_security_uniqueness_within_model():
 ```python
 def test_portfolio_drift_calculation():
     """Test mathematical accuracy of drift calculations"""
-    
+
 def test_optimization_constraints_enforcement():
     """Test that optimization respects all mathematical constraints"""
-    
+
 def test_market_value_conservation():
     """Test MV = Cash + Σ(ui × pi) conservation"""
 ```
@@ -240,8 +240,8 @@ def test_market_value_conservation():
 ## Phase 3: Infrastructure Layer with Integration Tests (Week 3)
 
 ### 3.1 Database Implementation & Tests
-**Duration:** 3-4 days  
-**Dependencies:** Domain layer complete  
+**Duration:** 3-4 days
+**Dependencies:** Domain layer complete
 **TDD Approach:** Integration tests with real MongoDB
 
 #### Test Deliverables (Write First):
@@ -268,17 +268,17 @@ def test_market_value_conservation():
 ```python
 async def test_model_crud_operations_with_real_database():
     """Test full CRUD lifecycle with MongoDB"""
-    
+
 async def test_optimistic_locking_prevents_concurrent_updates():
     """Test version-based concurrency control"""
-    
+
 async def test_complex_model_queries_and_filtering():
     """Test advanced querying capabilities"""
 ```
 
 ### 3.2 External Service Clients & Circuit Breaker Tests
-**Duration:** 2-3 days  
-**Dependencies:** Database implementation  
+**Duration:** 2-3 days
+**Dependencies:** Database implementation
 **TDD Approach:** Mock-based testing with failure simulation
 
 #### Test Deliverables (Write First):
@@ -303,8 +303,8 @@ async def test_complex_model_queries_and_filtering():
 - `src/infrastructure/external/base_client.py`
 
 ### 3.3 CVXPY Optimization Engine & Mathematical Tests
-**Duration:** 2-3 days  
-**Dependencies:** External services  
+**Duration:** 2-3 days
+**Dependencies:** External services
 **TDD Approach:** Mathematical correctness validation
 
 #### Test Deliverables (Write First):
@@ -325,13 +325,13 @@ async def test_complex_model_queries_and_filtering():
 ```python
 def test_optimization_minimizes_portfolio_drift():
     """Verify optimization actually minimizes drift objective"""
-    
+
 def test_all_constraints_satisfied_in_solution():
     """Verify solution satisfies all mathematical constraints"""
-    
+
 def test_infeasible_problem_detection():
     """Test detection and handling of infeasible optimization problems"""
-    
+
 def test_solver_timeout_handling():
     """Test graceful handling of solver timeouts"""
 ```
@@ -343,8 +343,8 @@ def test_solver_timeout_handling():
 ## Phase 4: Application Layer with Service Tests (Week 4)
 
 ### 4.1 DTOs, Mappers & Validation Tests
-**Duration:** 2-3 days  
-**Dependencies:** Infrastructure layer  
+**Duration:** 2-3 days
+**Dependencies:** Infrastructure layer
 **TDD Approach:** Data contract validation through comprehensive testing
 
 #### Test Deliverables (Write First):
@@ -368,8 +368,8 @@ def test_solver_timeout_handling():
 - `src/schemas/transactions.py`
 
 ### 4.2 Application Services & Orchestration Tests
-**Duration:** 3-4 days  
-**Dependencies:** DTOs and mappers  
+**Duration:** 3-4 days
+**Dependencies:** DTOs and mappers
 **TDD Approach:** Business workflow testing
 
 #### Test Deliverables (Write First):
@@ -390,10 +390,10 @@ def test_solver_timeout_handling():
 ```python
 async def test_complete_rebalancing_workflow():
     """Test end-to-end portfolio rebalancing process"""
-    
+
 async def test_multi_portfolio_parallel_processing():
     """Test concurrent rebalancing of multiple portfolios"""
-    
+
 async def test_external_service_failure_handling():
     """Test graceful degradation when external services fail"""
 ```
@@ -407,8 +407,8 @@ async def test_external_service_failure_handling():
 ## Phase 5: API Layer with FastAPI Tests (Week 5)
 
 ### 5.1 API Route Tests & Implementation
-**Duration:** 3-4 days  
-**Dependencies:** Application services  
+**Duration:** 3-4 days
+**Dependencies:** Application services
 **TDD Approach:** API contract testing with comprehensive scenarios
 
 #### Test Deliverables (Write First):
@@ -429,13 +429,13 @@ async def test_external_service_failure_handling():
 ```python
 async def test_create_investment_model_endpoint():
     """Test POST /api/v1/models endpoint"""
-    
+
 async def test_rebalance_portfolio_endpoint():
     """Test POST /api/v1/portfolio/{id}/rebalance endpoint"""
-    
+
 async def test_invalid_input_returns_400():
     """Test validation error handling"""
-    
+
 async def test_optimization_timeout_returns_422():
     """Test optimization timeout error handling"""
 ```
@@ -447,8 +447,8 @@ async def test_optimization_timeout_returns_422():
 - `src/api/dependencies.py`
 
 ### 5.2 Middleware & FastAPI Application Tests
-**Duration:** 1-2 days  
-**Dependencies:** API routes  
+**Duration:** 1-2 days
+**Dependencies:** API routes
 **TDD Approach:** Integration testing with full application stack
 
 #### Test Deliverables (Write First):
@@ -472,8 +472,8 @@ async def test_optimization_timeout_returns_422():
 ## Phase 6: End-to-End Integration & Performance Tests (Week 6)
 
 ### 6.1 Complete System Integration Tests
-**Duration:** 3-4 days  
-**Dependencies:** API layer complete  
+**Duration:** 3-4 days
+**Dependencies:** API layer complete
 **TDD Approach:** Full system validation with real dependencies
 
 #### Test Deliverables:
@@ -493,17 +493,17 @@ async def test_optimization_timeout_returns_422():
 ```python
 async def test_complete_model_creation_and_rebalancing():
     """Test full workflow from model creation to portfolio rebalancing"""
-    
+
 async def test_concurrent_rebalancing_requests():
     """Test system behavior under concurrent load"""
-    
+
 async def test_external_service_failure_recovery():
     """Test system resilience to external service failures"""
 ```
 
 ### 6.2 Mathematical Validation & Edge Cases
-**Duration:** 2-3 days  
-**Dependencies:** System integration  
+**Duration:** 2-3 days
+**Dependencies:** System integration
 **TDD Approach:** Comprehensive mathematical correctness validation
 
 #### Test Deliverables:
@@ -517,10 +517,10 @@ async def test_external_service_failure_recovery():
 ```python
 def test_complex_portfolio_optimization_accuracy():
     """Test optimization accuracy with complex portfolios"""
-    
+
 def test_numerical_precision_in_financial_calculations():
     """Test Decimal precision in all financial calculations"""
-    
+
 def test_constraint_boundary_conditions():
     """Test behavior at constraint boundaries"""
 ```
@@ -528,7 +528,7 @@ def test_constraint_boundary_conditions():
 ## Phase 7: Quality Assurance & Testing Completion (Week 7)
 
 ### 7.1 Test Coverage & Quality Gates
-**Duration:** 2-3 days  
+**Duration:** 2-3 days
 **Dependencies:** All functionality implemented
 
 #### Deliverables:
@@ -546,7 +546,7 @@ def test_constraint_boundary_conditions():
 - [ ] Security scan clean
 
 ### 7.2 Documentation & Code Review
-**Duration:** 2-3 days  
+**Duration:** 2-3 days
 **Dependencies:** Quality gates passed
 
 #### Deliverables:
@@ -559,7 +559,7 @@ def test_constraint_boundary_conditions():
 ## Phase 8: Deployment & Production Readiness (Week 8-10)
 
 ### 8.1 Containerization & Docker
-**Duration:** 2-3 days  
+**Duration:** 2-3 days
 **Dependencies:** Quality assurance complete
 
 #### Deliverables:
@@ -575,7 +575,7 @@ def test_constraint_boundary_conditions():
 - `.dockerignore`
 
 ### 8.2 Kubernetes Deployment
-**Duration:** 3-4 days  
+**Duration:** 3-4 days
 **Dependencies:** Containerization
 
 #### Deliverables:
@@ -594,7 +594,7 @@ def test_constraint_boundary_conditions():
 - `deployments/hpa.yaml`
 
 ### 8.3 CI/CD Pipeline & Production Validation
-**Duration:** 2-3 days  
+**Duration:** 2-3 days
 **Dependencies:** Kubernetes deployment
 
 #### Deliverables:
@@ -610,7 +610,7 @@ def test_constraint_boundary_conditions():
 - `scripts/deploy.sh`
 
 ### 8.4 Monitoring & Observability
-**Duration:** 1-2 days  
+**Duration:** 1-2 days
 **Dependencies:** Production deployment
 
 #### Deliverables:

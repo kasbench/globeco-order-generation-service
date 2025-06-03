@@ -7,16 +7,15 @@ and sample test data.
 """
 
 import asyncio
-import os
+from collections.abc import AsyncGenerator
 from decimal import Decimal
-from typing import AsyncGenerator, Dict, List
-from unittest.mock import AsyncMock, MagicMock
+import os
+from unittest.mock import AsyncMock
 
-import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+import pytest
 from testcontainers.mongodb import MongoDbContainer
 
 from src.config import Settings, get_settings
@@ -68,7 +67,7 @@ async def test_settings(test_database_url):
 @pytest.fixture
 async def test_db_client(
     test_settings: TestSettings,
-) -> AsyncGenerator[AsyncIOMotorClient, None]:
+) -> AsyncGenerator[AsyncIOMotorClient]:
     """Create a test database client."""
     client = AsyncIOMotorClient(test_settings.database_url)
     try:
@@ -80,7 +79,7 @@ async def test_db_client(
 @pytest.fixture
 async def test_database(
     test_db_client: AsyncIOMotorClient, test_settings: TestSettings
-) -> AsyncGenerator[AsyncIOMotorDatabase, None]:
+) -> AsyncGenerator[AsyncIOMotorDatabase]:
     """Create a clean test database for each test."""
     database = test_db_client[test_settings.database_name]
 
@@ -296,22 +295,29 @@ class TestUtils:
     @staticmethod
     def assert_decimal_equal(actual: Decimal, expected: Decimal, places: int = 4):
         """Assert that two decimal values are equal within specified precision."""
-        assert abs(actual - expected) < Decimal(
-            f"1e-{places}"
-        ), f"Expected {expected}, got {actual}"
+        assert abs(actual - expected) < Decimal(f"1e-{places}"), (
+            f"Expected {expected}, got {actual}"
+        )
 
     @staticmethod
     def assert_optimization_constraints_satisfied(
-        quantities: List[int],
-        prices: List[Decimal],
-        target_percentages: List[Decimal],
+        quantities: list[int],
+        prices: list[Decimal],
+        target_percentages: list[Decimal],
         market_value: Decimal,
-        low_drifts: List[Decimal],
-        high_drifts: List[Decimal],
+        low_drifts: list[Decimal],
+        high_drifts: list[Decimal],
     ):
         """Assert that optimization result satisfies all constraints."""
         for i, (qty, price, target, low_drift, high_drift) in enumerate(
-            zip(quantities, prices, target_percentages, low_drifts, high_drifts)
+            zip(
+                quantities,
+                prices,
+                target_percentages,
+                low_drifts,
+                high_drifts,
+                strict=False,
+            )
         ):
             position_value = qty * price
             target_value = market_value * target

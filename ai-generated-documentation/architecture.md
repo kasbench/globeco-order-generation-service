@@ -130,15 +130,15 @@ async def rebalance_model_portfolios(
 ```python
 class RebalanceService:
     """Orchestrates portfolio rebalancing operations."""
-    
+
     async def rebalance_portfolio(
-        self, 
+        self,
         portfolio_id: str
     ) -> schemas.RebalanceDTO:
         """Rebalances a single portfolio using its associated model."""
-        
+
     async def rebalance_model_portfolios(
-        self, 
+        self,
         model_id: str
     ) -> List[schemas.RebalanceDTO]:
         """Rebalances all portfolios associated with a model."""
@@ -152,28 +152,28 @@ class RebalanceService:
 ```python
 class InvestmentModel:
     """Represents an investment model with target allocations."""
-    
+
     model_id: ObjectId
     name: str
     positions: List[Position]
     portfolios: List[str]
     last_rebalance_date: Optional[datetime]
     version: int
-    
+
     def validate_position_targets(self) -> None:
         """Ensures position targets sum to ≤ 0.95 and follow business rules."""
-        
+
     def add_position(self, position: Position) -> None:
         """Adds a position with validation."""
 
 class Position:
     """Represents a security position within a model."""
-    
+
     security_id: str
     target: Decimal  # Target percentage (0-0.95)
     high_drift: Decimal  # Allowable drift above target (0-1)
     low_drift: Decimal  # Allowable drift below target (0-1)
-    
+
     def validate_drifts(self) -> None:
         """Validates drift bounds are within acceptable ranges."""
 ```
@@ -182,7 +182,7 @@ class Position:
 ```python
 class OptimizationEngine:
     """Handles mathematical optimization for portfolio rebalancing."""
-    
+
     async def optimize_portfolio(
         self,
         current_positions: Dict[str, int],
@@ -192,14 +192,14 @@ class OptimizationEngine:
     ) -> OptimizationResult:
         """
         Solves the portfolio optimization problem using CVXPY.
-        
+
         Minimizes: Σ|MV·target_i - quantity_i·price_i|
         Subject to: drift constraints, integer quantities, non-negativity
         """
 
 class DriftCalculator:
     """Calculates portfolio drift and target allocations."""
-    
+
     def calculate_portfolio_drift(
         self,
         positions: Dict[str, int],
@@ -218,13 +218,13 @@ class DriftCalculator:
 ```python
 class MongoModelRepository(ModelRepository):
     """MongoDB implementation of model repository using Beanie ODM."""
-    
+
     async def create(self, model: InvestmentModel) -> InvestmentModel:
         """Creates a new investment model in MongoDB."""
-        
+
     async def get_by_id(self, model_id: str) -> Optional[InvestmentModel]:
         """Retrieves model by ID with caching."""
-        
+
     async def update(self, model: InvestmentModel) -> InvestmentModel:
         """Updates model with optimistic concurrency control."""
 ```
@@ -233,18 +233,18 @@ class MongoModelRepository(ModelRepository):
 ```python
 class PortfolioAccountingClient:
     """Client for Portfolio Accounting Service."""
-    
+
     async def get_portfolio_balances(
-        self, 
+        self,
         portfolio_id: str
     ) -> List[BalanceDTO]:
         """Retrieves current portfolio positions."""
 
 class PricingServiceClient:
     """Client for Real-Time Pricing Service."""
-    
+
     async def get_security_prices(
-        self, 
+        self,
         security_ids: List[str]
     ) -> Dict[str, Decimal]:
         """Retrieves current security prices."""
@@ -254,7 +254,7 @@ class PricingServiceClient:
 ```python
 class CVXPYSolver:
     """CVXPY implementation of portfolio optimization."""
-    
+
     async def solve_rebalancing_problem(
         self,
         current_quantities: np.ndarray,
@@ -316,7 +316,7 @@ class ModelDocument(Document):
     portfolios: List[str]
     last_rebalance_date: Optional[datetime]
     version: int = 1
-    
+
     class Settings:
         name = "models"
         indexes = [
@@ -336,7 +336,7 @@ class ModelDocument(Document):
 ```python
 class ExternalServiceClient:
     """Base class for external service integration."""
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10)
@@ -442,10 +442,10 @@ async def readiness_check(
 ```python
 class OptimizationError(Exception):
     """Raised when portfolio optimization fails."""
-    
+
 class InfeasibleSolutionError(OptimizationError):
     """Raised when no feasible solution exists within constraints."""
-    
+
 class SolverTimeoutError(OptimizationError):
     """Raised when optimization solver exceeds timeout."""
 ```

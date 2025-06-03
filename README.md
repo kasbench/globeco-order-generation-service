@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
 
-> **Portfolio Optimization & Order Generation Microservice**  
+> **Portfolio Optimization & Order Generation Microservice**
 > Part of the GlobeCo Suite for KASBench Kubernetes Autoscaling Benchmark
 
 ## Overview
@@ -205,7 +205,7 @@ curl -X POST "http://localhost:8080/api/v1/models" \
         "lowDrift": 0.05
       },
       {
-        "securityId": "683b6b9620f302c879a5fef5", 
+        "securityId": "683b6b9620f302c879a5fef5",
         "target": 0.35,
         "highDrift": 0.03,
         "lowDrift": 0.03
@@ -365,7 +365,7 @@ Minimize: Σ|MV·target_i - quantity_i·price_i|
 Where:
 - `MV` = Portfolio market value
 - `ui` = Quantity of security i
-- `pi` = Price of security i  
+- `pi` = Price of security i
 - `wi` = Target weight for security i
 - `li`, `hi` = Low and high drift tolerances
 

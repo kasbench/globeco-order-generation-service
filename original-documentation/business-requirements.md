@@ -10,7 +10,7 @@
     - The **Portfolio Service** (globeco-portfolio-service) for portfolios
     - The **Real-Time Pricing Service** (globeco-pricing-service) for prices
     - The **Security Service** (globeco-security-service) for security types and descriptions
-    - The **Porfolio Optimization Service** (globeco-portfolio-optimization-service) for  
+    - The **Porfolio Optimization Service** (globeco-portfolio-optimization-service) for
     - The **Order Service** (globeco-order-service) to send generated orders
 
 
@@ -24,7 +24,7 @@
         - Rebalance all portfolios for a specified model. See [Rebalancer Requirements](#rebalancer-requirements).
         - Buy or sell a "slice" of a particular security to to model target for a given model.  See [Slice Requirements](#slice-requirements).  Slice will be in phase 2.
         - Increase or decrease the weighting of a particular security to a given percentage for a given model.  Do not change the model. See [Slice Requirements](#slice-requirements).  Slice will be in phase 2.
-    
+
 
 
 ## Model Requirements
@@ -78,19 +78,19 @@ Collection: models
 - ModelPortfolioDTO: [portfolioId]
 
 - RebalanceDTO: PortfolioId, [TransactionDTO], [DriftDTO]
-    
+
 - TransactionDTO
     | Field Name | Data Type | Description |
     | --- | --- | --- |
     | transactionType| String | 'BUY' or 'SELL'
-    | securityId | String | 24 character string 
+    | securityId | String | 24 character string
     | quantity | Integer | Positive quantity to BUY or SELL
-    | tradeDate | Date | Current date (no time) 
+    | tradeDate | Date | Current date (no time)
 
 - DriftDTO
     | Field Name | Data Type | Description |
     | --- | --- | --- |
-    | securityId| String | 
+    | securityId| String |
     | originalQuantity | Decimal128 | Original value of $u$ |
     | adjustedQuantity | Decimal128 | New value of $u^{'}$
     | target | Decimal128 | Target from the model
@@ -157,13 +157,13 @@ For each portfolio to be rebalanced:
 3. Create a combined list of positions from step 1 and 2.  For any security in step 1 that is not also in step 2, the values of $t$, $l$, and $h$ are 0.  These values of $t$, $l$, and $h$ are constants.
 4. Call the pricing service to get the price for all securities in the combined list from step 3.  These are your values of $p$.  These values of $p$ are a constant.
 5. Calculate MV according to equation 2.  This value is a constant.  Cash is the obtained from the position record without a securityId (null securityId).  Assume that the price is 1, so total cash is the value of the quantity returned.
-6. Solve the non-linear optimization problem by minimizing equation 2.  If there are multiple solutions, pick one at random.  
+6. Solve the non-linear optimization problem by minimizing equation 2.  If there are multiple solutions, pick one at random.
 7. The solution in step 6 will provide new values of $u$.  Let's call these new values $u_i^{'}$ and the original values $u_i$.  Calculate $\Delta_i = u_i^{'} - u_i$
 8. For each $i$, create a TransactionDTO.  If $\Delta_i$ is greater than 0, the transactionType is BUY; if less than 0, it is SELL.  If $\Delta_i$ is 0, skip it without creating a TransactionDTO.  The securityId is the security of $s_i$, the quantity is the absolute value of $\Delta_i$.  The tradeDate is the current systems date.
 9. For each $i$, create a driftDTO. The securityId is the securityId of $s_i$.  The original quantity is the original value of $u_i$.  The adjusted quantity is $u_i^{'}$.  The target, highDrift, and lowDrift come from the associated model for position $s_i$.  The field actual is calculated as $(u^{'} \cdot p)/MV$ and rounded to 4 decimal places.
 10. Create a RebalanceDTO with the portfolioId, the list of TransactionDTO, and the list of DriftDTO.
 
-**Note**: Rebalances may be parallelized up to the number of available threads, unless configured differently.  It should be possible to change configuration easily.  
+**Note**: Rebalances may be parallelized up to the number of available threads, unless configured differently.  It should be possible to change configuration easily.
 
 **Note**: In this version of the service, Orders are not sent directly to the Order Service.  They will be returned to the API caller (generally a UI) which will decide what to do.
 
@@ -190,7 +190,7 @@ The slice requirements will be implemented in a second phase.
         "lastUpdated": "2025-06-01T15:06:41Z",
         "version": 2
     }
-    ```    
+    ```
 
 ### Portfolio Service
 - Host: globeco-portfolio-service
@@ -304,8 +304,6 @@ The slice requirements will be implemented in a second phase.
 
 1. If the solver fails to find a solution or is still processing after 30 seconds, return an HTTP 422 status code with the message that "no feasible solution exists."  The 30 second timeout must be easily configuarable.
 
-2. For all external services, retry 3 times.  The timeout and number of retries must be easily configurable.  
+2. For all external services, retry 3 times.  The timeout and number of retries must be easily configurable.
 
 3. The Portfolio Accounting and Pricing Services are required for rebalancing.  If either service is unavailable even after retries, return an appropriate error and error message.  If a service is unavailable for one rebalance it is likely unavailable for all, so terminate after the first failed rebalance.
-
-

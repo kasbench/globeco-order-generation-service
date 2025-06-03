@@ -5,7 +5,7 @@ This module defines custom exception classes for handling various error
 scenarios in a structured and consistent way throughout the application.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class OrderGenerationServiceError(Exception):
@@ -14,8 +14,8 @@ class OrderGenerationServiceError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message)
         self.message = message
@@ -29,8 +29,8 @@ class ValidationError(OrderGenerationServiceError):
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
-        value: Optional[Any] = None,
+        field: str | None = None,
+        value: Any | None = None,
         **kwargs,
     ):
         super().__init__(message, "VALIDATION_ERROR", **kwargs)
@@ -43,7 +43,7 @@ class ValidationError(OrderGenerationServiceError):
 class BusinessRuleViolationError(OrderGenerationServiceError):
     """Raised when business rules are violated."""
 
-    def __init__(self, message: str, rule: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, rule: str | None = None, **kwargs):
         super().__init__(message, "BUSINESS_RULE_VIOLATION", **kwargs)
         if rule:
             self.details["rule"] = rule
@@ -73,8 +73,8 @@ class OptimizationError(OrderGenerationServiceError):
     def __init__(
         self,
         message: str,
-        solver_status: Optional[str] = None,
-        portfolio_id: Optional[str] = None,
+        solver_status: str | None = None,
+        portfolio_id: str | None = None,
         **kwargs,
     ):
         super().__init__(message, "OPTIMIZATION_ERROR", **kwargs)
@@ -87,7 +87,7 @@ class OptimizationError(OrderGenerationServiceError):
 class InfeasibleSolutionError(OptimizationError):
     """Raised when optimization problem has no feasible solution."""
 
-    def __init__(self, portfolio_id: Optional[str] = None, **kwargs):
+    def __init__(self, portfolio_id: str | None = None, **kwargs):
         message = "No feasible solution exists for the given constraints"
         super().__init__(
             message,
@@ -101,9 +101,7 @@ class InfeasibleSolutionError(OptimizationError):
 class SolverTimeoutError(OptimizationError):
     """Raised when optimization solver exceeds timeout."""
 
-    def __init__(
-        self, timeout_seconds: int, portfolio_id: Optional[str] = None, **kwargs
-    ):
+    def __init__(self, timeout_seconds: int, portfolio_id: str | None = None, **kwargs):
         message = f"Optimization solver exceeded {timeout_seconds} second timeout"
         super().__init__(
             message,
@@ -122,7 +120,7 @@ class ExternalServiceError(OrderGenerationServiceError):
         self,
         message: str,
         service_name: str,
-        status_code: Optional[int] = None,
+        status_code: int | None = None,
         **kwargs,
     ):
         super().__init__(message, "EXTERNAL_SERVICE_ERROR", **kwargs)
@@ -167,8 +165,8 @@ class ConcurrencyError(OrderGenerationServiceError):
         message: str,
         resource_type: str,
         resource_id: str,
-        expected_version: Optional[int] = None,
-        actual_version: Optional[int] = None,
+        expected_version: int | None = None,
+        actual_version: int | None = None,
         **kwargs,
     ):
         super().__init__(message, "CONCURRENCY_ERROR", **kwargs)
@@ -190,8 +188,8 @@ class DatabaseError(OrderGenerationServiceError):
     def __init__(
         self,
         message: str,
-        operation: Optional[str] = None,
-        collection: Optional[str] = None,
+        operation: str | None = None,
+        collection: str | None = None,
         **kwargs,
     ):
         super().__init__(message, "DATABASE_ERROR", **kwargs)
@@ -204,7 +202,7 @@ class DatabaseError(OrderGenerationServiceError):
 class ConfigurationError(OrderGenerationServiceError):
     """Raised when configuration is invalid or missing."""
 
-    def __init__(self, message: str, setting_name: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, setting_name: str | None = None, **kwargs):
         super().__init__(message, "CONFIGURATION_ERROR", **kwargs)
         if setting_name:
             self.details["setting_name"] = setting_name
@@ -223,7 +221,7 @@ class AuthorizationError(OrderGenerationServiceError):
     def __init__(
         self,
         message: str = "Access denied",
-        required_permission: Optional[str] = None,
+        required_permission: str | None = None,
         **kwargs,
     ):
         super().__init__(message, "AUTHORIZATION_ERROR", **kwargs)
@@ -239,7 +237,7 @@ class RateLimitExceededError(OrderGenerationServiceError):
         message: str,
         limit: int,
         window_seconds: int,
-        retry_after_seconds: Optional[int] = None,
+        retry_after_seconds: int | None = None,
         **kwargs,
     ):
         super().__init__(message, "RATE_LIMIT_EXCEEDED", **kwargs)
@@ -256,7 +254,7 @@ class RateLimitExceededError(OrderGenerationServiceError):
 class MathematicalError(OrderGenerationServiceError):
     """Raised when mathematical calculations fail."""
 
-    def __init__(self, message: str, calculation_type: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, calculation_type: str | None = None, **kwargs):
         super().__init__(message, "MATHEMATICAL_ERROR", **kwargs)
         if calculation_type:
             self.details["calculation_type"] = calculation_type
@@ -310,7 +308,7 @@ class InvalidDriftBoundsError(BusinessRuleViolationError):
         self,
         low_drift: float,
         high_drift: float,
-        security_id: Optional[str] = None,
+        security_id: str | None = None,
         **kwargs,
     ):
         message = f"Invalid drift bounds: low={low_drift}, high={high_drift}"

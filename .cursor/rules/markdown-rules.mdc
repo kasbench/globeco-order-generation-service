@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: false
 ---
 - Documentation that you generate should be placed in the @ai-generated-documentation folder.

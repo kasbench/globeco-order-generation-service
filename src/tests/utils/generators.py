@@ -5,13 +5,13 @@ This module provides functions to generate realistic test data for
 portfolios, securities, prices, and investment models.
 """
 
-import random
+from datetime import datetime
 from decimal import Decimal
-from typing import List, Dict, Any
-from datetime import datetime, timedelta
+import random
+from typing import Any
 
 
-def generate_test_securities(count: int = 10) -> List[Dict[str, Any]]:
+def generate_test_securities(count: int = 10) -> list[dict[str, Any]]:
     """
     Generate a list of test securities.
 
@@ -67,12 +67,12 @@ def generate_test_securities(count: int = 10) -> List[Dict[str, Any]]:
 
 
 def generate_random_portfolio(
-    securities: List[Dict[str, Any]],
+    securities: list[dict[str, Any]],
     total_market_value: Decimal = Decimal("100000"),
     min_positions: int = 5,
     max_positions: int = 15,
     cash_percentage: Decimal = Decimal("0.05"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate a random portfolio with realistic positions.
 
@@ -100,7 +100,9 @@ def generate_random_portfolio(
     positions = []
     remaining_value = investment_amount
 
-    for i, (security, weight) in enumerate(zip(selected_securities, weights)):
+    for i, (security, weight) in enumerate(
+        zip(selected_securities, weights, strict=False)
+    ):
         if i == len(weights) - 1:
             # Last position gets remaining value to ensure exact total
             position_value = remaining_value
@@ -152,10 +154,10 @@ def generate_random_portfolio(
 
 
 def generate_security_prices(
-    security_ids: List[str],
+    security_ids: list[str],
     base_price_range: tuple = (10.0, 500.0),
     volatility: float = 0.1,
-) -> Dict[str, Decimal]:
+) -> dict[str, Decimal]:
     """
     Generate realistic security prices.
 
@@ -188,11 +190,11 @@ def generate_security_prices(
 
 
 def generate_investment_model(
-    securities: List[Dict[str, Any]],
+    securities: list[dict[str, Any]],
     model_name: str = None,
     num_positions: int = None,
     target_sum_limit: Decimal = Decimal("0.95"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate a realistic investment model.
 
@@ -239,9 +241,7 @@ def generate_investment_model(
             else:
                 target = Decimal(
                     str(random.uniform(float(min_target), float(max_target)))
-                ).quantize(
-                    Decimal("0.005")
-                )  # Round to 0.5% increments
+                ).quantize(Decimal("0.005"))  # Round to 0.5% increments
 
         targets.append(target)
         remaining_target -= target
@@ -251,7 +251,9 @@ def generate_investment_model(
 
     # Remove any zero targets and corresponding securities
     non_zero_targets = [
-        (sec, tgt) for sec, tgt in zip(selected_securities, targets) if tgt > 0
+        (sec, tgt)
+        for sec, tgt in zip(selected_securities, targets, strict=False)
+        if tgt > 0
     ]
 
     positions = []
@@ -291,7 +293,7 @@ def generate_optimization_problem(
     num_securities: int = 5,
     market_value: Decimal = Decimal("100000"),
     complexity: str = "simple",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate an optimization problem for testing.
 

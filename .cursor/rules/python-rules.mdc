@@ -1,5 +1,5 @@
 ---
-description: 
+description:
 globs: *.py
 alwaysApply: false
 ---
@@ -55,5 +55,3 @@ globeco-order-generation-service/
 └── README.md
 ```
 - Use testcontainers for mongodb.  Mock external services for testing.
-
-

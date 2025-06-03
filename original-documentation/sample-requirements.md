@@ -2,11 +2,11 @@
 
 ## Service Overview
 
-**Service Name:** Portfolio Accounting Service  
-**Host:** globeco-portfolio-accounting-service  
-**Port:** 8087  
-**Author:** Noah Krieger (noah@kasbench.org)  
-**Organization:** KASBench (kasbench.org)  
+**Service Name:** Portfolio Accounting Service
+**Host:** globeco-portfolio-accounting-service
+**Port:** 8087
+**Author:** Noah Krieger (noah@kasbench.org)
+**Organization:** KASBench (kasbench.org)
 
 ### Purpose
 This microservice processes financial transactions and maintains portfolio account balances. It serves as part of the GlobeCo suite of applications for benchmarking Kubernetes autoscaling and will be deployed on Kubernetes 1.33.

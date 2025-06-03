@@ -5,16 +5,16 @@ This module provides utility functions for creating test models,
 cleaning up test data, and other common test operations.
 """
 
-from decimal import Decimal
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from decimal import Decimal
+from typing import Any
 
 
 def create_test_model(
     name: str = "Test Model",
-    positions: Optional[List[Dict[str, Any]]] = None,
-    portfolios: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    positions: list[dict[str, Any]] | None = None,
+    portfolios: list[str] | None = None,
+) -> dict[str, Any]:
     """
     Create a test investment model with default values.
 
@@ -67,7 +67,7 @@ async def cleanup_test_data(database) -> None:
         await database[collection_name].drop()
 
 
-def validate_model_data(model_data: Dict[str, Any]) -> bool:
+def validate_model_data(model_data: dict[str, Any]) -> bool:
     """
     Validate that model data conforms to expected structure.
 
@@ -114,7 +114,7 @@ def validate_model_data(model_data: Dict[str, Any]) -> bool:
 
 def create_test_portfolio_balance(
     security_id: str, quantity: int, price: Decimal, is_cash: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create a test portfolio balance entry.
 
@@ -143,8 +143,8 @@ def create_test_transaction(
     transaction_type: str,
     security_id: str,
     quantity: int,
-    trade_date: Optional[datetime] = None,
-) -> Dict[str, Any]:
+    trade_date: datetime | None = None,
+) -> dict[str, Any]:
     """
     Create a test transaction.
 
@@ -168,7 +168,7 @@ def create_test_transaction(
     }
 
 
-def calculate_portfolio_total_value(positions: List[Dict[str, Any]]) -> Decimal:
+def calculate_portfolio_total_value(positions: list[dict[str, Any]]) -> Decimal:
     """
     Calculate total portfolio value from positions.
 
@@ -181,7 +181,7 @@ def calculate_portfolio_total_value(positions: List[Dict[str, Any]]) -> Decimal:
     return sum(pos.get("marketValue", Decimal("0")) for pos in positions)
 
 
-def normalize_decimal_dict(data: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_decimal_dict(data: dict[str, Any]) -> dict[str, Any]:
     """
     Normalize decimal values in a dictionary for comparison.
 
@@ -214,7 +214,7 @@ def mock_external_service_response(
     success: bool = True,
     data: Any = None,
     error_message: str = "Service error",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create a mock response for external service calls.
 

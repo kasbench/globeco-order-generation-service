@@ -5,9 +5,10 @@ This module tests the health check functionality including liveness,
 readiness, and comprehensive health endpoints.
 """
 
-import pytest
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
+import pytest
 
 from src.main import create_app
 
@@ -106,7 +107,7 @@ class TestHealthEndpoints:
         # Check correlation ID is also in headers
         assert "X-Correlation-ID" in response.headers
 
-    @patch('src.api.routers.health.health_check.check_optimization_engine')
+    @patch("src.api.routers.health.health_check.check_optimization_engine")
     def test_liveness_probe_unhealthy_optimization(self, mock_check, health_client):
         """Test liveness probe when optimization engine is unhealthy."""
         # Mock optimization engine failure

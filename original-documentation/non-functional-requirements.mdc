@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: false
 ---
 - This is a microservice called the "Order Generation Service".  It is a microservice in the GlobeCo suite.  The GlobeCo suite is part of a Kubernetes autoscaling benchmark called KASBench.  This microservice will never be deployed in production.  It is used for benchmarking only.  It contains no production data and does not require security.
@@ -50,5 +50,3 @@ alwaysApply: false
 3. **Interface Segregation** - Clean contracts between layers
 4. **Domain-Centric Design** - Business logic isolated from infrastructure concerns
 5. **Idempotency** - Safe to retry operations without side effects
-
-

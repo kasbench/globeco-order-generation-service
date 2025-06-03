@@ -6,24 +6,22 @@ Order Generation Service. It sets up the application with all necessary middlewa
 routers, and configuration.
 """
 
-import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.api.routers.health import router as health_router
 from src.config import get_settings
+from src.core.security import SecurityHeaders
 from src.core.utils import (
     configure_structured_logging,
+    create_response_metadata,
     get_logger,
     set_correlation_id,
-    create_response_metadata,
 )
-from src.core.security import SecurityHeaders
-from src.api.routers.health import router as health_router
-
 
 # Configure structured logging early
 configure_structured_logging()
@@ -31,7 +29,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """
     Application lifespan manager for startup and shutdown events.
 
@@ -196,11 +194,10 @@ def create_app() -> FastAPI:
 
     # Custom exception handlers for domain-specific exceptions
     from src.core.exceptions import (
-        OrderGenerationServiceError,
-        ValidationError,
         BusinessRuleViolationError,
-        OptimizationError,
         ExternalServiceError,
+        OptimizationError,
+        ValidationError,
     )
 
     @app.exception_handler(ValidationError)

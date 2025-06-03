@@ -5,14 +5,15 @@ This test module validates that the testing infrastructure, fixtures,
 and utilities are properly configured and functional.
 """
 
-import pytest
 from decimal import Decimal
+
+import pytest
 
 from src.config import get_settings
 from src.tests.utils.assertions import assert_decimal_equal, assert_optimization_valid
 from src.tests.utils.generators import (
-    generate_test_securities,
     generate_security_prices,
+    generate_test_securities,
 )
 
 

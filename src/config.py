@@ -5,9 +5,8 @@ This module provides environment-based configuration using Pydantic Settings,
 allowing for easy configuration management across different deployment environments.
 """
 
-import logging
 from functools import lru_cache
-from typing import List
+import logging
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -87,14 +86,14 @@ class Settings(BaseSettings):
     )
 
     # CORS Configuration
-    cors_origins: List[str] = Field(default=["*"], description="Allowed CORS origins")
+    cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
     cors_allow_credentials: bool = Field(
         default=True, description="Allow CORS credentials"
     )
-    cors_allow_methods: List[str] = Field(
+    cors_allow_methods: list[str] = Field(
         default=["*"], description="Allowed CORS methods"
     )
-    cors_allow_headers: List[str] = Field(
+    cors_allow_headers: list[str] = Field(
         default=["*"], description="Allowed CORS headers"
     )
 
@@ -124,7 +123,7 @@ class Settings(BaseSettings):
         logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Get cached application settings instance.

@@ -5,18 +5,17 @@ This module provides security-related functions including authentication,
 authorization, input validation, and security utilities.
 """
 
+from datetime import datetime, timedelta
 import hashlib
 import hmac
 import secrets
-from typing import Any, Dict, Optional, List
-from datetime import datetime, timedelta
+from typing import Any
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from src.config import get_settings
 from src.core.utils import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -52,7 +51,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-    data: Dict[str, Any], expires_delta: Optional[timedelta] = None
+    data: dict[str, Any], expires_delta: timedelta | None = None
 ) -> str:
     """
     Create a JWT access token.
@@ -77,7 +76,7 @@ def create_access_token(
     return encoded_jwt
 
 
-def verify_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_token(token: str) -> dict[str, Any] | None:
     """
     Verify and decode a JWT token.
 
@@ -107,7 +106,7 @@ def generate_api_key() -> str:
     return secrets.token_urlsafe(32)
 
 
-def validate_api_key(api_key: str, valid_keys: List[str]) -> bool:
+def validate_api_key(api_key: str, valid_keys: list[str]) -> bool:
     """
     Validate an API key against a list of valid keys.
 
@@ -143,9 +142,9 @@ def sanitize_input(input_string: str, max_length: int = 1000) -> str:
     sanitized = input_string[:max_length]
 
     # Remove potentially dangerous characters
-    dangerous_chars = ['<', '>', '"', "'", '&', '\x00', '\n', '\r', '\t']
+    dangerous_chars = ["<", ">", '"', "'", "&", "\x00", "\n", "\r", "\t"]
     for char in dangerous_chars:
-        sanitized = sanitized.replace(char, '')
+        sanitized = sanitized.replace(char, "")
 
     return sanitized.strip()
 
@@ -171,7 +170,7 @@ def validate_financial_amount(amount: Any) -> bool:
             return False
 
         # Check for reasonable maximum (1 trillion)
-        if decimal_amount > Decimal('1000000000000'):
+        if decimal_amount > Decimal("1000000000000"):
             return False
 
         # Check decimal places (max 4)
@@ -197,7 +196,7 @@ def validate_percentage(percentage: Any) -> bool:
         from decimal import Decimal
 
         decimal_percentage = Decimal(str(percentage))
-        return Decimal('0') <= decimal_percentage <= Decimal('1')
+        return Decimal("0") <= decimal_percentage <= Decimal("1")
     except Exception:
         return False
 
@@ -223,7 +222,7 @@ def calculate_request_signature(
 
     # Calculate HMAC
     signature = hmac.new(
-        secret.encode('utf-8'), string_to_sign.encode('utf-8'), hashlib.sha256
+        secret.encode("utf-8"), string_to_sign.encode("utf-8"), hashlib.sha256
     ).hexdigest()
 
     return signature
@@ -255,7 +254,7 @@ def verify_request_signature(
     """
     try:
         # Check timestamp (prevent replay attacks)
-        request_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        request_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         current_time = datetime.utcnow().replace(tzinfo=request_time.tzinfo)
 
         if abs((current_time - request_time).total_seconds()) > tolerance_seconds:
@@ -287,9 +286,9 @@ def mask_sensitive_data(data: str, visible_chars: int = 4) -> str:
         Masked string
     """
     if len(data) <= visible_chars:
-        return '*' * len(data)
+        return "*" * len(data)
 
-    return data[:visible_chars] + '*' * (len(data) - visible_chars)
+    return data[:visible_chars] + "*" * (len(data) - visible_chars)
 
 
 def generate_secure_filename(original_filename: str) -> str:
@@ -307,14 +306,14 @@ def generate_secure_filename(original_filename: str) -> str:
 
     # Remove directory separators and other dangerous characters
     filename = os.path.basename(original_filename)
-    filename = re.sub(r'[^a-zA-Z0-9._-]', '', filename)
+    filename = re.sub(r"[^a-zA-Z0-9._-]", "", filename)
 
     # Ensure filename is not empty
     if not filename:
-        filename = 'file'
+        filename = "file"
 
     # Add timestamp to ensure uniqueness
-    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     name, ext = os.path.splitext(filename)
 
     return f"{name}_{timestamp}{ext}"
@@ -338,7 +337,7 @@ class SecurityHeaders:
     """Security headers for HTTP responses."""
 
     @staticmethod
-    def get_default_headers() -> Dict[str, str]:
+    def get_default_headers() -> dict[str, str]:
         """
         Get default security headers.
 
@@ -357,10 +356,10 @@ class SecurityHeaders:
 
 def validate_input_constraints(
     value: Any,
-    min_length: Optional[int] = None,
-    max_length: Optional[int] = None,
-    pattern: Optional[str] = None,
-    allowed_values: Optional[List[Any]] = None,
+    min_length: int | None = None,
+    max_length: int | None = None,
+    pattern: str | None = None,
+    allowed_values: list[Any] | None = None,
 ) -> bool:
     """
     Validate input against various constraints.

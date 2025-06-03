@@ -2,11 +2,11 @@
 
 ## Service Overview
 
-**Service Name:** Order Generation Service  
-**Host:** globeco-order-generation-service  
-**Port:** 8080  
-**Author:** Noah Krieger (noah@kasbench.org)  
-**Organization:** KASBench (kasbench.org)  
+**Service Name:** Order Generation Service
+**Host:** globeco-order-generation-service
+**Port:** 8080
+**Author:** Noah Krieger (noah@kasbench.org)
+**Organization:** KASBench (kasbench.org)
 
 ### Purpose
 This microservice creates orders to buy and sell securities for multiple portfolios through mathematical optimization. It maintains investment models, performs portfolio rebalancing using advanced optimization algorithms, and serves as part of the GlobeCo suite of applications for benchmarking Kubernetes autoscaling.
