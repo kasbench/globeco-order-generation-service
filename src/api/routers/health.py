@@ -8,12 +8,12 @@ to determine if the service is alive and ready to serve traffic.
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.config import Settings, get_settings
-from src.core.utils import get_correlation_id, get_logger, create_response_metadata
+from src.core.utils import create_response_metadata, get_correlation_id, get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()

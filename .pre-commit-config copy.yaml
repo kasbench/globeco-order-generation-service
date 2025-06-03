@@ -1,0 +1,75 @@
+# Pre-commit configuration for the Order Generation Service
+# This file configures automatic code quality checks that run before commits
+
+repos:
+  # Black - Python code formatter
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        name: Format code with Black
+        language_version: python3.13
+        args: [--target-version, py313]
+
+  # Ruff - Fast Python linter (linting only, no formatting)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.12
+    hooks:
+      - id: ruff
+        name: Lint code with Ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # Python import sorting (after Black formatting)
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: Sort imports with isort
+        args: [--profile, black, --filter-files]
+
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: Ensure files end with newline
+      - id: check-yaml
+        name: Check YAML syntax
+        exclude: ^original-documentation/.*\.yaml$  # Skip original docs with syntax issues
+      - id: check-toml
+        name: Check TOML syntax
+      - id: check-json
+        name: Check JSON syntax
+      - id: check-added-large-files
+        name: Check for large files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: check-docstring-first
+        name: Check docstring placement
+      - id: debug-statements
+        name: Check for debug statements
+
+# Configure which files to run hooks on
+exclude: |
+  (?x)^(
+    \.venv/.*|
+    \.git/.*|
+    \.pytest_cache/.*|
+    __pycache__/.*|
+    \.mypy_cache/.*|
+    htmlcov/.*|
+    \.coverage.*|
+    build/.*|
+    dist/.*|
+    original-documentation/.*
+  )$
+
+# Global settings
+default_language_version:
+  python: python3.13
+
+# Minimum pre-commit version
+minimum_pre_commit_version: "3.6.0"

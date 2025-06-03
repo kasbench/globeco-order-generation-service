@@ -1,11 +1,241 @@
 """
-Custom exceptions for the Order Generation Service.
+Custom exceptions for the application.
 
-This module defines custom exception classes for handling various error
-scenarios in a structured and consistent way throughout the application.
+This module defines custom exception classes for different types of errors
+that can occur in the investment management system.
 """
 
-from typing import Any
+from typing import Any, Dict, Optional
+
+
+class ServiceException(Exception):
+    """Base exception for all service-related errors."""
+
+    def __init__(
+        self,
+        message: str,
+        error_code: str = "SERVICE_ERROR",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.message = message
+        self.error_code = error_code
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class ValidationError(ServiceException):
+    """Raised when data validation fails."""
+
+    def __init__(
+        self,
+        message: str,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="VALIDATION_ERROR",
+            details=details,
+        )
+
+
+class BusinessRuleViolationError(ServiceException):
+    """Raised when business rules are violated."""
+
+    def __init__(
+        self,
+        message: str,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="BUSINESS_RULE_VIOLATION",
+            details=details,
+        )
+
+
+class ExternalServiceError(ServiceException):
+    """Raised when external service calls fail."""
+
+    def __init__(
+        self,
+        message: str,
+        service_name: str,
+        status_code: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.service_name = service_name
+        self.status_code = status_code
+
+        error_details = {"service_name": service_name}
+        if status_code:
+            error_details["status_code"] = status_code
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=message,
+            error_code="EXTERNAL_SERVICE_ERROR",
+            details=error_details,
+        )
+
+
+class OptimizationError(ServiceException):
+    """Raised when portfolio optimization fails."""
+
+    def __init__(
+        self,
+        message: str,
+        solver_status: Optional[str] = None,
+        solve_time: Optional[float] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.solver_status = solver_status
+        self.solve_time = solve_time
+
+        error_details = {}
+        if solver_status:
+            error_details["solver_status"] = solver_status
+        if solve_time is not None:
+            error_details["solve_time"] = solve_time
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=message,
+            error_code="OPTIMIZATION_ERROR",
+            details=error_details,
+        )
+
+
+class RepositoryError(ServiceException):
+    """Raised when repository operations fail."""
+
+    def __init__(
+        self,
+        message: str,
+        operation: str,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.operation = operation
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+
+        error_details = {"operation": operation}
+        if entity_type:
+            error_details["entity_type"] = entity_type
+        if entity_id:
+            error_details["entity_id"] = entity_id
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=message,
+            error_code="REPOSITORY_ERROR",
+            details=error_details,
+        )
+
+
+class InfeasibleSolutionError(OptimizationError):
+    """Raised when optimization problem has no feasible solution."""
+
+    def __init__(
+        self,
+        message: str = "No feasible solution exists for the optimization problem",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            solver_status="INFEASIBLE",
+            details=details,
+        )
+        self.error_code = "INFEASIBLE_SOLUTION"
+
+
+class SolverTimeoutError(OptimizationError):
+    """Raised when optimization solver exceeds time limit."""
+
+    def __init__(
+        self,
+        message: str = "Optimization solver exceeded time limit",
+        timeout_seconds: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        error_details = details or {}
+        if timeout_seconds:
+            error_details["timeout_seconds"] = timeout_seconds
+
+        super().__init__(
+            message=message,
+            solver_status="TIMEOUT",
+            details=error_details,
+        )
+        self.error_code = "SOLVER_TIMEOUT"
+
+
+class ConcurrencyError(RepositoryError):
+    """Raised when concurrent modification conflicts occur."""
+
+    def __init__(
+        self,
+        message: str = "Concurrent modification detected",
+        expected_version: Optional[int] = None,
+        actual_version: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        error_details = details or {}
+        if expected_version is not None:
+            error_details["expected_version"] = expected_version
+        if actual_version is not None:
+            error_details["actual_version"] = actual_version
+
+        super().__init__(
+            message=message,
+            operation="update",
+            details=error_details,
+        )
+        self.error_code = "CONCURRENCY_ERROR"
+
+
+class NotFoundError(RepositoryError):
+    """Raised when requested entity is not found."""
+
+    def __init__(
+        self,
+        message: str,
+        entity_type: str,
+        entity_id: str,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            operation="get",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=details,
+        )
+        self.error_code = "NOT_FOUND"
+
+
+class ConfigurationError(ServiceException):
+    """Raised when configuration is invalid or missing."""
+
+    def __init__(
+        self,
+        message: str,
+        config_key: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        error_details = details or {}
+        if config_key:
+            error_details["config_key"] = config_key
+
+        super().__init__(
+            message=message,
+            error_code="CONFIGURATION_ERROR",
+            details=error_details,
+        )
 
 
 class OrderGenerationServiceError(Exception):
@@ -21,32 +251,6 @@ class OrderGenerationServiceError(Exception):
         self.message = message
         self.error_code = error_code or self.__class__.__name__.upper()
         self.details = details or {}
-
-
-class ValidationError(OrderGenerationServiceError):
-    """Raised when input validation fails."""
-
-    def __init__(
-        self,
-        message: str,
-        field: str | None = None,
-        value: Any | None = None,
-        **kwargs,
-    ):
-        super().__init__(message, "VALIDATION_ERROR", **kwargs)
-        if field:
-            self.details["field"] = field
-        if value is not None:
-            self.details["value"] = str(value)
-
-
-class BusinessRuleViolationError(OrderGenerationServiceError):
-    """Raised when business rules are violated."""
-
-    def __init__(self, message: str, rule: str | None = None, **kwargs):
-        super().__init__(message, "BUSINESS_RULE_VIOLATION", **kwargs)
-        if rule:
-            self.details["rule"] = rule
 
 
 class ModelNotFoundError(OrderGenerationServiceError):
@@ -65,68 +269,6 @@ class PortfolioNotFoundError(OrderGenerationServiceError):
         message = f"Portfolio not found: {portfolio_id}"
         super().__init__(message, "PORTFOLIO_NOT_FOUND", **kwargs)
         self.details["portfolio_id"] = portfolio_id
-
-
-class OptimizationError(OrderGenerationServiceError):
-    """Raised when portfolio optimization fails."""
-
-    def __init__(
-        self,
-        message: str,
-        solver_status: str | None = None,
-        portfolio_id: str | None = None,
-        **kwargs,
-    ):
-        super().__init__(message, "OPTIMIZATION_ERROR", **kwargs)
-        if solver_status:
-            self.details["solver_status"] = solver_status
-        if portfolio_id:
-            self.details["portfolio_id"] = portfolio_id
-
-
-class InfeasibleSolutionError(OptimizationError):
-    """Raised when optimization problem has no feasible solution."""
-
-    def __init__(self, portfolio_id: str | None = None, **kwargs):
-        message = "No feasible solution exists for the given constraints"
-        super().__init__(
-            message,
-            solver_status="INFEASIBLE",
-            portfolio_id=portfolio_id,
-            error_code="INFEASIBLE_SOLUTION",
-            **kwargs,
-        )
-
-
-class SolverTimeoutError(OptimizationError):
-    """Raised when optimization solver exceeds timeout."""
-
-    def __init__(self, timeout_seconds: int, portfolio_id: str | None = None, **kwargs):
-        message = f"Optimization solver exceeded {timeout_seconds} second timeout"
-        super().__init__(
-            message,
-            solver_status="TIMEOUT",
-            portfolio_id=portfolio_id,
-            error_code="SOLVER_TIMEOUT",
-            **kwargs,
-        )
-        self.details["timeout_seconds"] = timeout_seconds
-
-
-class ExternalServiceError(OrderGenerationServiceError):
-    """Raised when external service calls fail."""
-
-    def __init__(
-        self,
-        message: str,
-        service_name: str,
-        status_code: int | None = None,
-        **kwargs,
-    ):
-        super().__init__(message, "EXTERNAL_SERVICE_ERROR", **kwargs)
-        self.details["service_name"] = service_name
-        if status_code:
-            self.details["status_code"] = status_code
 
 
 class PortfolioAccountingServiceError(ExternalServiceError):
@@ -157,31 +299,6 @@ class SecurityServiceError(ExternalServiceError):
         super().__init__(message, "Security Service", **kwargs)
 
 
-class ConcurrencyError(OrderGenerationServiceError):
-    """Raised when concurrent modification conflicts occur."""
-
-    def __init__(
-        self,
-        message: str,
-        resource_type: str,
-        resource_id: str,
-        expected_version: int | None = None,
-        actual_version: int | None = None,
-        **kwargs,
-    ):
-        super().__init__(message, "CONCURRENCY_ERROR", **kwargs)
-        self.details.update(
-            {
-                "resource_type": resource_type,
-                "resource_id": resource_id,
-            }
-        )
-        if expected_version is not None:
-            self.details["expected_version"] = expected_version
-        if actual_version is not None:
-            self.details["actual_version"] = actual_version
-
-
 class DatabaseError(OrderGenerationServiceError):
     """Raised when database operations fail."""
 
@@ -197,15 +314,6 @@ class DatabaseError(OrderGenerationServiceError):
             self.details["operation"] = operation
         if collection:
             self.details["collection"] = collection
-
-
-class ConfigurationError(OrderGenerationServiceError):
-    """Raised when configuration is invalid or missing."""
-
-    def __init__(self, message: str, setting_name: str | None = None, **kwargs):
-        super().__init__(message, "CONFIGURATION_ERROR", **kwargs)
-        if setting_name:
-            self.details["setting_name"] = setting_name
 
 
 class AuthenticationError(OrderGenerationServiceError):

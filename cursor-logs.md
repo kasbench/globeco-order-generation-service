@@ -301,3 +301,132 @@ Complete domain layer implementation with comprehensive TDD coverage, following 
 - ✅ All 18 tests passing (previously 17/18)
 - ✅ Consistent error format across all API endpoints
 - ✅ Health endpoints maintain proper error codes and structure
+
+## Phase 2.2: Repository Interfaces & Tests ✅ COMPLETED
+
+**User Request:** Proceed to Phase 2.2 following the successful completion of Phase 2.1 domain models with all 79 tests passing.
+
+**Starting Status:** All domain entities and value objects completed, need to create repository interfaces and domain services following TDD methodology.
+
+**Actions Taken:**
+
+1. **Repository Interface Tests Created** ✅
+   - **File:** `src/tests/unit/domain/test_model_repository.py` (27 tests)
+   - Created comprehensive test classes:
+     - `TestModelRepositoryInterface` - Interface contract verification
+     - `TestModelRepositoryCreate` - Creation operations with validation
+     - `TestModelRepositoryRead` - Read operations (by ID, name, portfolio filtering)
+     - `TestModelRepositoryUpdate` - Update operations with optimistic locking
+     - `TestModelRepositoryDelete` - Deletion operations with validation
+     - `TestModelRepositoryQueryFiltering` - Advanced query capabilities
+     - `TestModelRepositoryOptimisticLocking` - Version conflict handling
+   - Added `@pytest.mark.asyncio` decorators for async support
+   - Used mocking to test interface contracts without implementations
+
+2. **Domain Service Interface Tests Created** ✅
+   - **File:** `src/tests/unit/domain/test_domain_services.py` (15 tests)
+   - Created comprehensive test classes:
+     - `TestOptimizationEngineInterface` - Portfolio optimization service
+     - `TestDriftCalculatorInterface` - Portfolio drift calculation service
+     - `TestValidationServiceInterface` - Business rule validation service
+   - Tested optimization with feasible and infeasible scenarios
+   - Tested drift calculations for individual positions and total portfolio
+   - Tested validation for models, optimization inputs, and market data
+
+3. **Repository Interfaces Implemented** ✅
+   - **File:** `src/domain/repositories/base_repository.py`
+     - Generic base repository interface with CRUD operations
+     - Type-safe using Python generics (TypeVar)
+     - Standard operations: create, get_by_id, update, delete, list_all
+   - **File:** `src/domain/repositories/model_repository.py`
+     - Extended base repository for Investment Model operations
+     - Model-specific methods: get_by_name, exists_by_name, find_by_portfolio
+     - Query methods: find_by_last_rebalance_date, find_models_needing_rebalance
+     - Analytics methods: get_models_by_security, portfolio/position counts
+
+4. **Domain Service Interfaces Implemented** ✅
+   - **File:** `src/domain/services/optimization_engine.py`
+     - `OptimizationEngine` interface for portfolio rebalancing
+     - `OptimizationResult` dataclass with validation
+     - Mathematical optimization: minimize drift subject to constraints
+     - Solver health checks and metadata methods
+   - **File:** `src/domain/services/drift_calculator.py`
+     - `DriftCalculator` interface for portfolio analysis
+     - `DriftInfo` dataclass with validation
+     - Portfolio drift calculations, bounds checking, trade requirements
+   - **File:** `src/domain/services/validation_service.py`
+     - `ValidationService` interface for business rule validation
+     - Model validation, optimization input validation
+     - Market data validation, business rule enforcement
+
+5. **Enhanced Exception Hierarchy** ✅
+   - **File:** `src/core/exceptions.py` - Major enhancement
+   - Added domain-specific exception classes:
+     - `ServiceException` - Base exception with error codes and details
+     - `OptimizationError`, `InfeasibleSolutionError`, `SolverTimeoutError`
+     - `RepositoryError`, `ConcurrencyError`, `NotFoundError`
+     - Enhanced existing ValidationError and BusinessRuleViolationError
+   - Comprehensive error context with structured details
+
+6. **Module Structure & Exports** ✅
+   - Updated `src/domain/repositories/__init__.py` with interface exports
+   - Updated `src/domain/services/__init__.py` with service exports
+   - Proper module organization and clean imports
+
+**Test Results:**
+- **Repository Interface Tests:** 27/27 passing
+- **Domain Service Tests:** 15/15 passing
+- **Total Domain Tests:** 121/121 passing (79 entities + 42 interfaces)
+- **Success Rate:** 100% ✅
+
+**Key Technical Achievements:**
+
+1. **Complete TDD Implementation:**
+   - Wrote comprehensive tests first for all interfaces
+   - Implemented interfaces to satisfy test contracts
+   - Zero implementation-driven development
+
+2. **Repository Pattern Implementation:**
+   - Generic base repository with type safety
+   - Domain-specific repository extensions
+   - Comprehensive CRUD and query operations
+   - Optimistic locking support
+
+3. **Domain Service Architecture:**
+   - Clear separation of concerns
+   - Interface-driven design for testability
+   - Mathematical optimization abstractions
+   - Business rule validation abstractions
+
+4. **Data Structure Design:**
+   - `OptimizationResult` with feasibility validation
+   - `DriftInfo` with comprehensive position analysis
+   - Immutable dataclasses with business validation
+
+5. **Exception Design Patterns:**
+   - Hierarchical exception structure
+   - Structured error details for debugging
+   - Domain-specific error types
+   - Error code standardization
+
+**Business Value Delivered:**
+- **Repository Contracts:** Clear specifications for data persistence layer
+- **Service Contracts:** Well-defined business logic interfaces
+- **Optimization Interface:** Mathematical portfolio rebalancing specification
+- **Drift Analysis:** Portfolio deviation measurement capabilities
+- **Validation Framework:** Business rule enforcement structure
+
+**Quality Metrics:**
+- **Test Coverage:** 100% interface coverage with comprehensive scenarios
+- **Code Quality:** Type-safe interfaces with proper abstractions
+- **Documentation:** Comprehensive docstrings with examples
+- **Error Handling:** Robust exception hierarchy with structured details
+
+**Phase 2.2 Status:** ✅ COMPLETED
+- All repository interfaces defined and tested
+- All domain service interfaces defined and tested
+- Enhanced exception hierarchy implemented
+- 100% test success rate (121/121 passing)
+- Ready to proceed to Phase 2.3: Domain Services & Mathematical Validation
+
+**Next Phase:** Phase 2.3 will implement the actual business logic services and mathematical validation algorithms that satisfy these interface contracts.
