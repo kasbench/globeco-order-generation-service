@@ -7,7 +7,6 @@ business rules, data integrity, and optimization inputs.
 
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Dict, List
 
 from src.domain.entities.model import InvestmentModel
 
@@ -43,8 +42,8 @@ class ValidationService(ABC):
     @abstractmethod
     async def validate_optimization_inputs(
         self,
-        current_positions: Dict[str, int],
-        prices: Dict[str, Decimal],
+        current_positions: dict[str, int],
+        prices: dict[str, Decimal],
         market_value: Decimal,
         model: InvestmentModel,
     ) -> bool:
@@ -90,7 +89,7 @@ class ValidationService(ABC):
         pass
 
     @abstractmethod
-    async def validate_market_data(self, prices: Dict[str, Decimal]) -> bool:
+    async def validate_market_data(self, prices: dict[str, Decimal]) -> bool:
         """
         Validate market data integrity.
 
@@ -113,7 +112,7 @@ class ValidationService(ABC):
 
     @abstractmethod
     async def validate_portfolio_data(
-        self, positions: Dict[str, int], market_value: Decimal
+        self, positions: dict[str, int], market_value: Decimal
     ) -> bool:
         """
         Validate portfolio position data.
@@ -138,9 +137,9 @@ class ValidationService(ABC):
     @abstractmethod
     async def validate_optimization_result(
         self,
-        result_positions: Dict[str, int],
+        result_positions: dict[str, int],
         model: InvestmentModel,
-        prices: Dict[str, Decimal],
+        prices: dict[str, Decimal],
         market_value: Decimal,
     ) -> bool:
         """
@@ -167,7 +166,7 @@ class ValidationService(ABC):
         pass
 
     @abstractmethod
-    async def validate_security_ids(self, security_ids: List[str]) -> bool:
+    async def validate_security_ids(self, security_ids: list[str]) -> bool:
         """
         Validate security ID format and uniqueness.
 

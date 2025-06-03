@@ -8,7 +8,6 @@ rebalancing using mathematical optimization algorithms.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Dict, Optional
 
 from src.domain.entities.model import InvestmentModel
 
@@ -17,8 +16,8 @@ from src.domain.entities.model import InvestmentModel
 class OptimizationResult:
     """Result of portfolio optimization."""
 
-    optimal_quantities: Dict[str, int]  # Security ID -> optimal quantity
-    objective_value: Optional[Decimal]  # Objective function value (if feasible)
+    optimal_quantities: dict[str, int]  # Security ID -> optimal quantity
+    objective_value: Decimal | None  # Objective function value (if feasible)
     solver_status: str  # OPTIMAL, INFEASIBLE, TIMEOUT, etc.
     solve_time_seconds: float  # Time taken to solve
     is_feasible: bool  # Whether a feasible solution was found
@@ -41,9 +40,9 @@ class OptimizationEngine(ABC):
     @abstractmethod
     async def optimize_portfolio(
         self,
-        current_positions: Dict[str, int],
+        current_positions: dict[str, int],
         target_model: InvestmentModel,
-        prices: Dict[str, Decimal],
+        prices: dict[str, Decimal],
         market_value: Decimal,
         timeout_seconds: int = 30,
     ) -> OptimizationResult:
@@ -76,9 +75,9 @@ class OptimizationEngine(ABC):
     @abstractmethod
     async def validate_solution(
         self,
-        solution: Dict[str, int],
+        solution: dict[str, int],
         target_model: InvestmentModel,
-        prices: Dict[str, Decimal],
+        prices: dict[str, Decimal],
         market_value: Decimal,
     ) -> bool:
         """
@@ -106,7 +105,7 @@ class OptimizationEngine(ABC):
         pass
 
     @abstractmethod
-    async def get_solver_info(self) -> Dict[str, str]:
+    async def get_solver_info(self) -> dict[str, str]:
         """
         Get information about the optimization solver.
 

@@ -6,7 +6,7 @@ should inherit from, providing common CRUD operations and patterns.
 """
 
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 # Generic type for domain entities
 T = TypeVar('T')
@@ -33,7 +33,7 @@ class BaseRepository(Generic[T], ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, entity_id: str) -> Optional[T]:
+    async def get_by_id(self, entity_id: str) -> T | None:
         """
         Retrieve an entity by its ID.
 
@@ -82,7 +82,7 @@ class BaseRepository(Generic[T], ABC):
         pass
 
     @abstractmethod
-    async def list_all(self) -> List[T]:
+    async def list_all(self) -> list[T]:
         """
         Retrieve all entities.
 

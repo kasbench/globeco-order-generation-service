@@ -8,7 +8,6 @@ portfolio drift metrics and position deviations from targets.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Dict, List
 
 from src.domain.entities.model import InvestmentModel
 
@@ -49,11 +48,11 @@ class DriftCalculator(ABC):
     @abstractmethod
     async def calculate_portfolio_drift(
         self,
-        positions: Dict[str, int],
-        prices: Dict[str, Decimal],
+        positions: dict[str, int],
+        prices: dict[str, Decimal],
         market_value: Decimal,
         model: InvestmentModel,
-    ) -> List[DriftInfo]:
+    ) -> list[DriftInfo]:
         """
         Calculate drift information for all positions in a portfolio.
 
@@ -88,7 +87,7 @@ class DriftCalculator(ABC):
         pass
 
     @abstractmethod
-    async def calculate_total_drift(self, drift_infos: List[DriftInfo]) -> Decimal:
+    async def calculate_total_drift(self, drift_infos: list[DriftInfo]) -> Decimal:
         """
         Calculate total portfolio drift as sum of absolute individual drifts.
 
@@ -104,8 +103,8 @@ class DriftCalculator(ABC):
 
     @abstractmethod
     async def get_positions_outside_bounds(
-        self, drift_infos: List[DriftInfo]
-    ) -> List[DriftInfo]:
+        self, drift_infos: list[DriftInfo]
+    ) -> list[DriftInfo]:
         """
         Get positions that are outside their acceptable drift bounds.
 
@@ -119,8 +118,8 @@ class DriftCalculator(ABC):
 
     @abstractmethod
     async def calculate_required_trades(
-        self, current_positions: Dict[str, int], target_positions: Dict[str, int]
-    ) -> Dict[str, int]:
+        self, current_positions: dict[str, int], target_positions: dict[str, int]
+    ) -> dict[str, int]:
         """
         Calculate required trades to move from current to target positions.
 
@@ -137,8 +136,8 @@ class DriftCalculator(ABC):
     @abstractmethod
     async def estimate_trade_costs(
         self,
-        trades: Dict[str, int],
-        prices: Dict[str, Decimal],
+        trades: dict[str, int],
+        prices: dict[str, Decimal],
         commission_rate: Decimal = Decimal("0.001"),  # 0.1% default
     ) -> Decimal:
         """

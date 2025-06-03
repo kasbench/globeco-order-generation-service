@@ -9,7 +9,6 @@ that implementations must satisfy.
 """
 
 from decimal import Decimal
-from typing import Dict, List
 from unittest.mock import AsyncMock, Mock
 
 import pytest

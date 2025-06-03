@@ -7,7 +7,6 @@ extending the base repository with model-specific operations.
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import List, Optional
 
 from src.domain.entities.model import InvestmentModel
 from src.domain.repositories.base_repository import BaseRepository
@@ -17,7 +16,7 @@ class ModelRepository(BaseRepository[InvestmentModel]):
     """Repository interface for Investment Model persistence."""
 
     @abstractmethod
-    async def get_by_name(self, name: str) -> Optional[InvestmentModel]:
+    async def get_by_name(self, name: str) -> InvestmentModel | None:
         """
         Retrieve a model by its name.
 
@@ -43,7 +42,7 @@ class ModelRepository(BaseRepository[InvestmentModel]):
         pass
 
     @abstractmethod
-    async def find_by_portfolio(self, portfolio_id: str) -> List[InvestmentModel]:
+    async def find_by_portfolio(self, portfolio_id: str) -> list[InvestmentModel]:
         """
         Find all models that include the specified portfolio.
 
@@ -58,7 +57,7 @@ class ModelRepository(BaseRepository[InvestmentModel]):
     @abstractmethod
     async def find_by_last_rebalance_date(
         self, cutoff_date: datetime
-    ) -> List[InvestmentModel]:
+    ) -> list[InvestmentModel]:
         """
         Find models that were last rebalanced before the cutoff date.
 
@@ -71,7 +70,7 @@ class ModelRepository(BaseRepository[InvestmentModel]):
         pass
 
     @abstractmethod
-    async def find_models_needing_rebalance(self) -> List[InvestmentModel]:
+    async def find_models_needing_rebalance(self) -> list[InvestmentModel]:
         """
         Find models that may need rebalancing.
 
@@ -84,7 +83,7 @@ class ModelRepository(BaseRepository[InvestmentModel]):
         pass
 
     @abstractmethod
-    async def get_models_by_security(self, security_id: str) -> List[InvestmentModel]:
+    async def get_models_by_security(self, security_id: str) -> list[InvestmentModel]:
         """
         Find all models that contain positions in the specified security.
 

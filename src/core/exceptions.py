@@ -5,7 +5,7 @@ This module defines custom exception classes for different types of errors
 that can occur in the investment management system.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ServiceException(Exception):
@@ -15,7 +15,7 @@ class ServiceException(Exception):
         self,
         message: str,
         error_code: str = "SERVICE_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         self.message = message
         self.error_code = error_code
@@ -29,7 +29,7 @@ class ValidationError(ServiceException):
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(
             message=message,
@@ -44,7 +44,7 @@ class BusinessRuleViolationError(ServiceException):
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(
             message=message,
@@ -60,8 +60,8 @@ class ExternalServiceError(ServiceException):
         self,
         message: str,
         service_name: str,
-        status_code: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None,
+        status_code: int | None = None,
+        details: dict[str, Any] | None = None,
     ):
         self.service_name = service_name
         self.status_code = status_code
@@ -85,9 +85,9 @@ class OptimizationError(ServiceException):
     def __init__(
         self,
         message: str,
-        solver_status: Optional[str] = None,
-        solve_time: Optional[float] = None,
-        details: Optional[Dict[str, Any]] = None,
+        solver_status: str | None = None,
+        solve_time: float | None = None,
+        details: dict[str, Any] | None = None,
     ):
         self.solver_status = solver_status
         self.solve_time = solve_time
@@ -114,9 +114,9 @@ class RepositoryError(ServiceException):
         self,
         message: str,
         operation: str,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         self.operation = operation
         self.entity_type = entity_type
@@ -143,7 +143,7 @@ class InfeasibleSolutionError(OptimizationError):
     def __init__(
         self,
         message: str = "No feasible solution exists for the optimization problem",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(
             message=message,
@@ -159,8 +159,8 @@ class SolverTimeoutError(OptimizationError):
     def __init__(
         self,
         message: str = "Optimization solver exceeded time limit",
-        timeout_seconds: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None,
+        timeout_seconds: int | None = None,
+        details: dict[str, Any] | None = None,
     ):
         error_details = details or {}
         if timeout_seconds:
@@ -180,9 +180,9 @@ class ConcurrencyError(RepositoryError):
     def __init__(
         self,
         message: str = "Concurrent modification detected",
-        expected_version: Optional[int] = None,
-        actual_version: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None,
+        expected_version: int | None = None,
+        actual_version: int | None = None,
+        details: dict[str, Any] | None = None,
     ):
         error_details = details or {}
         if expected_version is not None:
@@ -206,7 +206,7 @@ class NotFoundError(RepositoryError):
         message: str,
         entity_type: str,
         entity_id: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(
             message=message,
@@ -224,8 +224,8 @@ class ConfigurationError(ServiceException):
     def __init__(
         self,
         message: str,
-        config_key: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        config_key: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         error_details = details or {}
         if config_key:

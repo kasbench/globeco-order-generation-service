@@ -6,7 +6,7 @@ to determine if the service is alive and ready to serve traffic.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -27,8 +27,8 @@ class HealthStatus(BaseModel):
     service: str
     version: str
     correlation_id: str
-    checks: Dict[str, Any]
-    uptime_seconds: Optional[float] = None
+    checks: dict[str, Any]
+    uptime_seconds: float | None = None
 
 
 class HealthCheck:
@@ -37,7 +37,7 @@ class HealthCheck:
     def __init__(self):
         self.start_time = datetime.utcnow()
 
-    async def check_database(self) -> Dict[str, Any]:
+    async def check_database(self) -> dict[str, Any]:
         """
         Check database connectivity.
 
@@ -60,7 +60,7 @@ class HealthCheck:
                 "response_time_ms": None,
             }
 
-    async def check_external_services(self) -> Dict[str, Any]:
+    async def check_external_services(self) -> dict[str, Any]:
         """
         Check external service connectivity.
 
@@ -103,7 +103,7 @@ class HealthCheck:
             "services": service_status,
         }
 
-    async def check_optimization_engine(self) -> Dict[str, Any]:
+    async def check_optimization_engine(self) -> dict[str, Any]:
         """
         Check optimization engine availability.
 
