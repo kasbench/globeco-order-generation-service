@@ -244,15 +244,34 @@ async def liveness_probe(settings: Settings = Depends(get_settings)) -> dict:
     logger.debug("Liveness probe requested")
 
     try:
+        # Check optimization engine
+        opt_check = await health_check.check_optimization_engine()
+
+        # If optimization engine is unhealthy, return 503
+        if opt_check["status"] != "healthy":
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "status": "unhealthy",
+                    "service": "GlobeCo Order Generation Service",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "version": settings.version,
+                    "correlation_id": get_correlation_id(),
+                    "error": {
+                        "code": "SERVICE_UNAVAILABLE",
+                        "message": "Optimization engine is unavailable",
+                        "details": opt_check.get("message", "Unknown error"),
+                    },
+                },
+            )
+
         return {
             "status": "healthy",
             "service": "GlobeCo Order Generation Service",
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "version": settings.version,
             "correlation_id": get_correlation_id(),
-            "checks": {
-                "optimization_engine": await health_check.check_optimization_engine()
-            },
+            "checks": {"optimization_engine": opt_check},
         }
 
     except Exception as e:
@@ -264,7 +283,10 @@ async def liveness_probe(settings: Settings = Depends(get_settings)) -> dict:
                 "service": "GlobeCo Order Generation Service",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "correlation_id": get_correlation_id(),
-                "error": str(e),
+                "error": {
+                    "code": "SERVICE_UNAVAILABLE",
+                    "message": str(e),
+                },
             },
         )
 
@@ -300,12 +322,16 @@ async def readiness_probe(
         for service, healthy in external_services.items():
             external_status[service] = "healthy" if healthy else "unhealthy"
 
-        # Determine overall status
+        # Check optimization engine
+        opt_check = await health_check.check_optimization_engine()
+
+        # Determine overall status - use "ready"/"not_ready" to match test expectations
         overall_status = (
             "ready"
             if (
                 db_status == "healthy"
                 and all(status == "healthy" for status in external_status.values())
+                and opt_check["status"] == "healthy"
             )
             else "not_ready"
         )
@@ -314,9 +340,11 @@ async def readiness_probe(
             "status": overall_status,
             "service": "GlobeCo Order Generation Service",
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "dependencies": {
+            "correlation_id": get_correlation_id(),
+            "dependencies": {  # Changed from "checks" to "dependencies" to match tests
                 "database": db_status,
                 "external_services": external_status,
+                "optimization_engine": opt_check,
             },
         }
 
@@ -332,10 +360,14 @@ async def readiness_probe(
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
-                "status": "not_ready",
+                "status": "not_ready",  # Changed from "unhealthy" to "not_ready"
                 "service": "GlobeCo Order Generation Service",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "error": "Health check timed out",
+                "correlation_id": get_correlation_id(),
+                "error": {
+                    "code": "TIMEOUT",
+                    "message": "External service check timed out",
+                },
             },
         )
     except Exception as e:
@@ -343,15 +375,19 @@ async def readiness_probe(
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
-                "status": "not_ready",
+                "status": "not_ready",  # Changed from "unhealthy" to "not_ready"
                 "service": "GlobeCo Order Generation Service",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "error": str(e),
+                "correlation_id": get_correlation_id(),
+                "error": {
+                    "code": "SERVICE_UNAVAILABLE",
+                    "message": str(e),
+                },
             },
         )
 
 
-@router.get("/", response_model=HealthStatus, tags=["health"])
+@router.get("/health", response_model=HealthStatus, tags=["health"])
 async def health_check_endpoint(
     include_external: bool = True,
     include_optimization: bool = True,
@@ -380,3 +416,25 @@ async def health_check_endpoint(
         include_external=include_external,
         include_optimization=include_optimization,
     )
+
+
+@router.get("/", response_model=HealthStatus, tags=["health"])
+async def health_check_root(
+    include_external: bool = True,
+    include_optimization: bool = True,
+    settings: Settings = Depends(get_settings),
+) -> HealthStatus:
+    """
+    Root health check endpoint (alias for /health).
+
+    This endpoint provides detailed health information about all service
+    components and dependencies. It can be used for monitoring and debugging.
+
+    Args:
+        include_external: Whether to check external services
+        include_optimization: Whether to check optimization engine
+
+    Returns:
+        Detailed health status
+    """
+    return await health_check_endpoint(include_external, include_optimization, settings)

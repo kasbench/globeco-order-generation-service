@@ -241,11 +241,24 @@ class TestRebalanceModelEndpoint:
 
     def test_rebalance_model_invalid_id_format(self, app_client):
         """Test rebalancing with invalid model ID format."""
+        # Setup - need to override dependencies even for validation errors
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.rebalance import get_rebalance_service
+
+        app_client.app.dependency_overrides[get_rebalance_service] = (
+            lambda: mock_service
+        )
+
         # Execute
         response = app_client.post("/api/v1/model/invalid_id/rebalance")
 
         # Verify
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
 
     def test_rebalance_model_partial_success(self, app_client, sample_rebalance_dto):
         """Test partial success scenario where some portfolios fail rebalancing."""
@@ -410,11 +423,24 @@ class TestRebalancePortfolioEndpoint:
 
     def test_rebalance_portfolio_invalid_id_format(self, app_client):
         """Test rebalancing with invalid portfolio ID format."""
+        # Setup - need to override dependencies even for validation errors
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.rebalance import get_rebalance_service
+
+        app_client.app.dependency_overrides[get_rebalance_service] = (
+            lambda: mock_service
+        )
+
         # Execute
         response = app_client.post("/api/v1/portfolio/invalid_id/rebalance")
 
         # Verify
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
 
     def test_rebalance_portfolio_complex_transactions(self, app_client):
         """Test portfolio rebalancing with multiple transaction types."""
@@ -547,6 +573,16 @@ class TestRebalanceRouterErrorHandling:
 
     def test_path_parameter_validation(self, app_client):
         """Test validation of path parameters (model ID, portfolio ID)."""
+        # Setup - need to override dependencies even for validation errors
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.rebalance import get_rebalance_service
+
+        app_client.app.dependency_overrides[get_rebalance_service] = (
+            lambda: mock_service
+        )
+
         # Test invalid model ID
         response = app_client.post("/api/v1/model/invalid_model_id/rebalance")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -554,3 +590,6 @@ class TestRebalanceRouterErrorHandling:
         # Test invalid portfolio ID
         response = app_client.post("/api/v1/portfolio/invalid_portfolio_id/rebalance")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()

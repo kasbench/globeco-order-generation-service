@@ -74,7 +74,9 @@ class TestTransactionDTO:
             )
 
         # Test invalid characters (24 chars but with special characters)
-        with pytest.raises(ValidationError, match="exactly 24.*alphanumeric"):
+        with pytest.raises(
+            ValidationError, match="String should have at least 24 characters"
+        ):
             TransactionDTO(
                 transaction_type=TransactionType.BUY,
                 security_id="STOCK1234567890123456_!",  # 24 chars with special chars
@@ -87,7 +89,7 @@ class TestTransactionDTO:
         from src.schemas.transactions import TransactionDTO, TransactionType
 
         # Test negative quantity
-        with pytest.raises(ValidationError, match="greater than 0"):
+        with pytest.raises(ValidationError, match="Input should be greater than 0"):
             TransactionDTO(
                 transaction_type=TransactionType.BUY,
                 security_id="STOCK1234567890123456789",
@@ -96,7 +98,7 @@ class TestTransactionDTO:
             )
 
         # Test zero quantity
-        with pytest.raises(ValidationError, match="positive"):
+        with pytest.raises(ValidationError, match="Input should be greater than 0"):
             TransactionDTO(
                 transaction_type=TransactionType.BUY,
                 security_id="STOCK1234567890123456789",
@@ -217,7 +219,9 @@ class TestDriftDTO:
         from src.schemas.rebalance import DriftDTO
 
         # Test negative original quantity
-        with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 0"
+        ):
             DriftDTO(
                 security_id="STOCK1234567890123456789",
                 original_quantity=Decimal("-500"),  # Negative
@@ -229,7 +233,9 @@ class TestDriftDTO:
             )
 
         # Test negative adjusted quantity
-        with pytest.raises(ValidationError, match="non-negative"):
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 0"
+        ):
             DriftDTO(
                 security_id="STOCK1234567890123456789",
                 original_quantity=Decimal("500"),

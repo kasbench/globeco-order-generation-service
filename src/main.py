@@ -8,6 +8,7 @@ routers, and configuration.
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,7 @@ from src.core.security import SecurityHeaders
 from src.core.utils import (
     configure_structured_logging,
     create_response_metadata,
+    get_correlation_id,
     get_logger,
     set_correlation_id,
 )
@@ -169,6 +171,44 @@ def create_app() -> FastAPI:
     app.include_router(rebalance_router, prefix="/api/v1", tags=["rebalance"])
 
     # Global exception handler
+    @app.exception_handler(TimeoutError)
+    async def timeout_exception_handler(request: Request, exc: TimeoutError):
+        """Handle timeout errors, especially for health check endpoints."""
+        logger.warning(
+            "Timeout error occurred",
+            exception=str(exc),
+            path=request.url.path,
+            method=request.method,
+        )
+
+        # Special handling for health check endpoints
+        if request.url.path.startswith("/health"):
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "service": "GlobeCo Order Generation Service",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "correlation_id": get_correlation_id(),
+                    "error": {
+                        "code": "TIMEOUT",
+                        "message": str(exc),
+                    },
+                },
+            )
+
+        # For non-health endpoints, return generic service unavailable
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "SERVICE_TIMEOUT",
+                    "message": "Request timed out",
+                    **create_response_metadata(),
+                }
+            },
+        )
+
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
         """Global exception handler for unhandled exceptions."""

@@ -61,34 +61,37 @@ class Settings(BaseSettings):
     # External Service URLs
     portfolio_accounting_service_url: str = Field(
         default="http://globeco-portfolio-accounting-service:8087",
-        description="Portfolio Accounting Service URL",
+        description="Portfolio Accounting Service base URL",
     )
+
     pricing_service_url: str = Field(
-        default="http://globeco-pricing-service:8083", description="Pricing Service URL"
+        default="http://globeco-pricing-service:8083",
+        description="Pricing Service base URL",
     )
+
     portfolio_service_url: str = Field(
         default="http://globeco-portfolio-service:8000",
-        description="Portfolio Service URL",
+        description="Portfolio Service base URL",
     )
+
     security_service_url: str = Field(
         default="http://globeco-security-service:8000",
-        description="Security Service URL",
+        description="Security Service base URL",
     )
 
     # External Service Configuration
     external_service_timeout: int = Field(
-        default=10, description="External service request timeout in seconds"
-    )
-    external_service_retries: int = Field(
-        default=3, description="Number of retry attempts for external services"
+        default=10, description="Timeout for external service calls in seconds"
     )
 
-    # Optimization Engine Configuration
+    # Rebalancing Configuration
+    rebalancing_max_workers: int = Field(
+        default=4,
+        description="Maximum parallel workers for multi-portfolio rebalancing",
+    )
+
     optimization_timeout: int = Field(
         default=30, description="Optimization solver timeout in seconds"
-    )
-    max_parallel_rebalances: int = Field(
-        default=10, description="Maximum number of parallel rebalancing operations"
     )
 
     # CORS Configuration

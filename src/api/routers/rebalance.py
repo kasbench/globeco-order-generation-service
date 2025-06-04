@@ -1,18 +1,16 @@
 """
-FastAPI router for portfolio rebalancing endpoints.
+Portfolio rebalancing API endpoints.
 
-This module provides HTTP endpoints for portfolio rebalancing operations:
-- POST /model/{model_id}/rebalance - Rebalance all portfolios in a model
-- POST /portfolio/{portfolio_id}/rebalance - Rebalance single portfolio
-
-All endpoints include proper error handling, validation, and status codes.
+This module provides REST API endpoints for portfolio rebalancing operations,
+including model-based and individual portfolio rebalancing.
 """
 
-import re
 from typing import List
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 
+from src.api.dependencies import get_rebalance_service
 from src.core.exceptions import (
     ExternalServiceError,
     ModelNotFoundError,
@@ -22,121 +20,107 @@ from src.core.exceptions import (
 from src.core.services.rebalance_service import RebalanceService
 from src.schemas.rebalance import RebalanceDTO
 
-router = APIRouter(prefix="", tags=["rebalancing"])
+logger = structlog.get_logger(__name__)
+router = APIRouter()
 
 
-def get_rebalance_service() -> RebalanceService:
-    """Dependency to get rebalance service instance."""
-    # This will be implemented when we create the actual service
-    # For now, return a mock for testing
-    from unittest.mock import AsyncMock
-
-    return AsyncMock()
+def validate_model_id(model_id: str) -> str:
+    """Validate model ID format."""
+    if not model_id or len(model_id) != 24:
+        raise ValueError("Invalid model ID format")
+    return model_id
 
 
-def validate_object_id(object_id: str, object_type: str = "ID") -> str:
-    """Validate ObjectId format."""
-    if not re.match(r'^[a-fA-F0-9]{24}$', object_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid {object_type} format. Must be 24-character hexadecimal string.",
-        )
-    return object_id
+def validate_portfolio_id(portfolio_id: str) -> str:
+    """Validate portfolio ID format."""
+    if not portfolio_id or len(portfolio_id) != 24:
+        raise ValueError("Invalid portfolio ID format")
+    return portfolio_id
 
 
-@router.post("/model/{model_id}/rebalance", response_model=List[RebalanceDTO])
+@router.post(
+    "/model/{model_id}/rebalance",
+    response_model=List[RebalanceDTO],
+    status_code=status.HTTP_200_OK,
+)
 async def rebalance_model_portfolios(
-    model_id: str = Path(..., description="24-character model ID"),
+    model_id: str = Path(..., description="Model ID"),
     rebalance_service: RebalanceService = Depends(get_rebalance_service),
 ) -> List[RebalanceDTO]:
-    """
-    Rebalance all portfolios associated with an investment model.
-
-    Args:
-        model_id: 24-character hexadecimal model ID
-
-    Returns:
-        List of rebalancing results for each portfolio in the model.
-
-    Raises:
-        400: Invalid model ID format
-        404: Model not found
-        422: Optimization failed (no feasible solution, solver timeout)
-        503: External service unavailable
-        500: Internal server error
-    """
-    # Validate model ID format
-    validate_object_id(model_id, "model ID")
-
+    """Rebalance all portfolios associated with an investment model."""
     try:
-        results = await rebalance_service.rebalance_model_portfolios(model_id)
-        return results
+        validate_model_id(model_id)
+        return await rebalance_service.rebalance_model_portfolios(model_id)
     except ModelNotFoundError:
+        logger.warning("Model not found for rebalancing", model_id=model_id)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Model with ID {model_id} not found",
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Model {model_id} not found"
         )
     except OptimizationError as e:
+        logger.warning("Optimization failed", model_id=model_id, error=str(e))
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Optimization failed: {str(e)}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         )
     except ExternalServiceError as e:
+        logger.error("External service error", model_id=model_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"External service unavailable: {str(e)}",
+            detail="External service unavailable",
+        )
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
         )
     except Exception as e:
+        logger.error("Model rebalancing failed", model_id=model_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to rebalance model portfolios: {str(e)}",
+            detail="Internal server error",
         )
 
 
-@router.post("/portfolio/{portfolio_id}/rebalance", response_model=RebalanceDTO)
+@router.post(
+    "/portfolio/{portfolio_id}/rebalance",
+    response_model=RebalanceDTO,
+    status_code=status.HTTP_200_OK,
+)
 async def rebalance_portfolio(
-    portfolio_id: str = Path(..., description="24-character portfolio ID"),
+    portfolio_id: str = Path(..., description="Portfolio ID"),
     rebalance_service: RebalanceService = Depends(get_rebalance_service),
 ) -> RebalanceDTO:
-    """
-    Rebalance a single portfolio.
-
-    Args:
-        portfolio_id: 24-character hexadecimal portfolio ID
-
-    Returns:
-        Rebalancing results for the portfolio.
-
-    Raises:
-        400: Invalid portfolio ID format
-        404: Portfolio not found
-        422: Optimization failed (no feasible solution, solver timeout)
-        503: External service unavailable
-        500: Internal server error
-    """
-    # Validate portfolio ID format
-    validate_object_id(portfolio_id, "portfolio ID")
-
+    """Rebalance a single portfolio using its associated investment model."""
     try:
-        result = await rebalance_service.rebalance_portfolio(portfolio_id)
-        return result
+        validate_portfolio_id(portfolio_id)
+        return await rebalance_service.rebalance_portfolio(portfolio_id)
     except PortfolioNotFoundError:
+        logger.warning("Portfolio not found for rebalancing", portfolio_id=portfolio_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Portfolio with ID {portfolio_id} not found",
+            detail=f"Portfolio {portfolio_id} not found",
         )
     except OptimizationError as e:
+        logger.warning("Optimization failed", portfolio_id=portfolio_id, error=str(e))
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Optimization failed: {str(e)}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         )
     except ExternalServiceError as e:
+        logger.error("External service error", portfolio_id=portfolio_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"External service unavailable: {str(e)}",
+            detail="External service unavailable",
+        )
+    except ValueError:
+        logger.warning("Invalid portfolio ID format", portfolio_id=portfolio_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid portfolio ID format",
         )
     except Exception as e:
+        logger.error(
+            "Portfolio rebalancing failed", portfolio_id=portfolio_id, error=str(e)
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to rebalance portfolio: {str(e)}",
+            detail="Internal server error",
         )

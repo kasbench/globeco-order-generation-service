@@ -7,8 +7,8 @@ readiness, and comprehensive health endpoints.
 
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from src.main import create_app
 
@@ -57,12 +57,12 @@ class TestHealthEndpoints:
 
         # Check response structure
         assert "status" in data
-        assert "checks" in data
+        assert "dependencies" in data
 
         # Check that all components are checked for readiness
-        assert "database" in data["checks"]
-        assert "external_services" in data["checks"]
-        assert "optimization_engine" in data["checks"]
+        assert "database" in data["dependencies"]
+        assert "external_services" in data["dependencies"]
+        assert "optimization_engine" in data["dependencies"]
 
     def test_general_health_endpoint(self, health_client):
         """Test general health endpoint with all checks."""

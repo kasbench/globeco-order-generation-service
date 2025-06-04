@@ -15,6 +15,7 @@ This module tests the FastAPI router for investment model operations:
 Tests cover status codes, request/response validation, error scenarios, and service integration.
 """
 
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
@@ -209,11 +210,22 @@ class TestGetModelByIdEndpoint:
 
     def test_get_model_by_id_invalid_format(self, app_client):
         """Test invalid model ID format."""
+        # Setup - need to override dependencies even for validation errors
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
         # Execute
         response = app_client.get("/api/v1/model/invalid_id")
 
         # Verify
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
 
 
 @pytest.mark.unit
@@ -261,16 +273,31 @@ class TestCreateModelEndpoint:
 
     def test_create_model_validation_error(self, app_client):
         """Test model creation with validation errors."""
+        # Setup - need to override dependencies even for validation errors
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
         # Invalid request data - target sum > 0.95
         request_data = {
             "name": "Invalid Model",
             "positions": [
                 {
                     "security_id": "STOCK1234567890123456789",
-                    "target": "0.96",  # Too high
+                    "target": "0.50",  # Valid individual target
                     "high_drift": "0.05",
                     "low_drift": "0.03",
-                }
+                },
+                {
+                    "security_id": "BOND1111111111111111111A",
+                    "target": "0.50",  # Valid individual target
+                    "high_drift": "0.05",
+                    "low_drift": "0.03",
+                },
+                # Sum = 1.00 > 0.95, should trigger business validation error
             ],
             "portfolios": ["683b6d88a29ee10e8b499643"],
         }
@@ -278,8 +305,11 @@ class TestCreateModelEndpoint:
         # Execute
         response = app_client.post("/api/v1/models", json=request_data)
 
-        # Verify
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # Verify - Pydantic validation errors return 422 (Unprocessable Entity)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
 
     def test_create_model_domain_validation_error(self, app_client):
         """Test domain validation error during model creation."""
@@ -515,9 +545,11 @@ class TestPositionManagementEndpoints:
             "low_drift": "0.03",
         }
 
-        # Execute
-        response = app_client.delete(
-            "/api/v1/model/507f1f77bcf86cd799439011/position", json=request_data
+        # Execute - Use request() method for DELETE with body data
+        response = app_client.request(
+            "DELETE",
+            "/api/v1/model/507f1f77bcf86cd799439011/position",
+            json=request_data,
         )
 
         # Verify
@@ -584,9 +616,11 @@ class TestPortfolioAssociationEndpoints:
 
         request_data = {"portfolios": ["683b6d88a29ee10e8b499643"]}
 
-        # Execute
-        response = app_client.delete(
-            "/api/v1/model/507f1f77bcf86cd799439011/portfolio", json=request_data
+        # Execute - Use request() method for DELETE with body data
+        response = app_client.request(
+            "DELETE",
+            "/api/v1/model/507f1f77bcf86cd799439011/portfolio",
+            json=request_data,
         )
 
         # Verify
@@ -611,9 +645,11 @@ class TestPortfolioAssociationEndpoints:
 
         request_data = {"portfolios": ["683b6d88a29ee10e8b499643"]}
 
-        # Execute
-        response = app_client.delete(
-            "/api/v1/model/507f1f77bcf86cd799439011/portfolio", json=request_data
+        # Execute - Use request() method for DELETE with body data
+        response = app_client.request(
+            "DELETE",
+            "/api/v1/model/507f1f77bcf86cd799439011/portfolio",
+            json=request_data,
         )
 
         # Verify
@@ -649,6 +685,14 @@ class TestModelRouterErrorHandling:
 
     def test_request_validation_errors(self, app_client):
         """Test Pydantic request validation errors."""
+        # Setup - need to override dependencies even for validation errors
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
         # Invalid request body (missing required fields)
         invalid_request = {
             "name": "",  # Empty name
@@ -658,8 +702,11 @@ class TestModelRouterErrorHandling:
         # Execute
         response = app_client.post("/api/v1/models", json=invalid_request)
 
-        # Verify
+        # Verify - Pydantic validation errors return 422 (Unprocessable Entity)
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
 
     def test_json_decode_error_handling(self, app_client):
         """Test handling of malformed JSON requests."""
