@@ -344,7 +344,7 @@ class RebalanceService:
 
             logger.debug(
                 "Portfolio optimization completed",
-                status=optimization_result.status.value,
+                status=optimization_result.solver_status,
             )
 
             return optimization_result
@@ -425,8 +425,8 @@ class RebalanceService:
                 original_quantity=original_qty,
                 adjusted_quantity=adjusted_qty,
                 target=position.target.value,
-                high_drift=position.high_drift.value,
-                low_drift=position.low_drift.value,
+                high_drift=position.drift_bounds.high_drift,
+                low_drift=position.drift_bounds.low_drift,
                 actual=actual_percentage,
             )
 

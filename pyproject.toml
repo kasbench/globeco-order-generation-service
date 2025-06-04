@@ -209,3 +209,9 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod",
     "\\.\\.\\.",
 ]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8.3",
+    "safety>=3.2.9",
+]
