@@ -200,6 +200,10 @@ class ConcurrencyError(RepositoryError):
         self.error_code = "CONCURRENCY_ERROR"
 
 
+# Alias for backward compatibility
+OptimisticLockingError = ConcurrencyError
+
+
 class NotFoundError(RepositoryError):
     """Raised when requested entity is not found."""
 
