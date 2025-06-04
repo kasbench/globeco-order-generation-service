@@ -59,14 +59,16 @@ class ExternalServiceError(ServiceException):
     def __init__(
         self,
         message: str,
-        service_name: str,
+        service: str = None,  # Accept both service and service_name for compatibility
+        service_name: str = None,
         status_code: int | None = None,
         details: dict[str, Any] | None = None,
     ):
-        self.service_name = service_name
+        # Support both service and service_name parameters
+        self.service_name = service or service_name or "unknown"
         self.status_code = status_code
 
-        error_details = {"service_name": service_name}
+        error_details = {"service_name": self.service_name}
         if status_code:
             error_details["status_code"] = status_code
         if details:
@@ -440,3 +442,43 @@ class DatabaseConnectionError(ServiceException):
             error_code="DATABASE_CONNECTION_ERROR",
             details=details or {},
         )
+
+
+class ServiceTimeoutError(ExternalServiceError):
+    """Raised when external service requests timeout."""
+
+    def __init__(
+        self,
+        message: str,
+        service: str = None,
+        timeout_seconds: float | None = None,
+        details: dict[str, Any] | None = None,
+    ):
+        error_details = details or {}
+        if timeout_seconds:
+            error_details["timeout_seconds"] = timeout_seconds
+
+        super().__init__(
+            message=message,
+            service=service,
+            details=error_details,
+        )
+        self.error_code = "SERVICE_TIMEOUT"
+
+
+class ServiceUnavailableError(ExternalServiceError):
+    """Raised when external service is unavailable (circuit breaker open)."""
+
+    def __init__(
+        self,
+        message: str,
+        service: str = None,
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            message=message,
+            service=service,
+            status_code=503,
+            details=details,
+        )
+        self.error_code = "SERVICE_UNAVAILABLE"
