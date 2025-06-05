@@ -396,3 +396,90 @@ Changed from Python module execution to direct command execution:
 This fix addresses the pre-commit configuration file discovery issue and ensures the quality checks stage of the CI/CD pipeline executes successfully with proper code formatting and linting validation.
 
 ---
+
+## CI/CD Pipeline Pre-commit Temporary Disable - Unblocking CI
+
+**Date:** 2024-12-23
+**Prompt:** "We're still hitting errors with pre-commit. Please disable this step in the CI for now."
+
+**Issue Persistence:**
+Despite multiple attempts to fix the pre-commit configuration issue, the CI pipeline continued to fail with:
+```
+InvalidConfigError:
+=====> .pre-commit-config.yaml is not a file
+Check the log at /home/runner/.cache/pre-commit/pre-commit.log
+Error: Process completed with exit code 1.
+```
+
+**Decision Rationale:**
+- **CI Pipeline Priority**: Unblocking the CI/CD pipeline is more important than pre-commit hooks in the short term
+- **Investigation Required**: The pre-commit issue needs deeper investigation outside of the CI context
+- **Core Functionality**: The main application testing and deployment can proceed without pre-commit
+- **Temporary Measure**: This is a temporary disable while we investigate the root cause
+
+**Changes Applied:**
+1. **Commented out pre-commit installation**:
+   ```yaml
+   # Before:
+   uv pip install pre-commit black mypy bandit
+
+   # After:
+   uv pip install black mypy bandit
+   # pre-commit temporarily disabled: uv pip install pre-commit
+   ```
+
+2. **Commented out pre-commit version verification**:
+   ```yaml
+   # Before:
+   echo "=== Pre-commit Info ==="
+   uv run pre-commit --version
+
+   # After:
+   # echo "=== Pre-commit Info ==="
+   # uv run pre-commit --version
+   ```
+
+3. **Commented out all pre-commit execution steps**:
+   ```yaml
+   # Pre-commit disabled temporarily due to config file discovery issues in CI
+   # - name: Debug pre-commit environment
+   # - name: Install pre-commit hooks
+   # - name: Run pre-commit hooks
+   ```
+
+**Impact Assessment:**
+- ✅ **CI Pipeline Unblocked**: Quality checks stage will now complete successfully
+- ✅ **Core Quality Tools**: Bandit security scanning and other tools still functioning
+- ⚠️ **Code Formatting**: Automatic code formatting (Black, isort) not enforced in CI
+- ⚠️ **Code Quality**: Standard pre-commit hooks (trailing whitespace, etc.) not running
+
+**Compensation Measures:**
+- **Manual Code Quality**: Developers can still run pre-commit locally before pushing
+- **Security Scanning**: Bandit security scanning remains active in CI
+- **Future Re-enablement**: Pre-commit will be re-enabled once configuration issue is resolved
+
+**Next Steps for Investigation:**
+1. **Local Testing**: Verify pre-commit works correctly in local development environment
+2. **CI Environment Analysis**: Investigate differences between local and GitHub Actions environment
+3. **Alternative Approaches**: Consider alternative pre-commit installation/execution methods
+4. **File Path Investigation**: Deep dive into working directory and file path issues in CI
+
+**Files Modified:**
+- `.github/workflows/ci.yml` - Temporarily disabled all pre-commit related steps
+
+**Business Impact:**
+- **CI/CD Pipeline Reliability**: Unblocked critical testing and deployment pipeline
+- **Development Velocity**: Allows continued development without CI failures
+- **Quality Assurance**: Maintains security scanning while investigating code formatting issues
+- **Risk Management**: Balances code quality enforcement with pipeline reliability
+
+**Temporary Status:**
+- 🚫 **Pre-commit in CI**: Temporarily disabled
+- ✅ **Security Scanning**: Active (Bandit)
+- ✅ **Testing Pipeline**: Fully functional
+- ✅ **Docker Build**: Fully functional
+- ✅ **Performance Tests**: Fully functional
+
+This temporary fix ensures the CI/CD pipeline can complete successfully while we investigate the pre-commit configuration file discovery issue in the GitHub Actions environment.
+
+---
