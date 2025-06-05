@@ -40,7 +40,8 @@ class Settings(BaseSettings):
 
     # Database Configuration
     database_url: str = Field(
-        default="mongodb://localhost:27017", description="MongoDB connection URL"
+        default="mongodb://globeco-order-generation-service-mongodb:27017",
+        description="MongoDB connection URL",
     )
     database_name: str = Field(
         default="globeco_order_generation", description="Database name"

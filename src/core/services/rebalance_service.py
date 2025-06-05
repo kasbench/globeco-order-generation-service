@@ -233,7 +233,7 @@ class RebalanceService:
         """Get the investment model associated with a portfolio."""
         try:
             # Find model that contains this portfolio
-            models = await self._model_repository.get_all()
+            models = await self._model_repository.list_all()
 
             for model in models:
                 if portfolio_id in model.portfolios:

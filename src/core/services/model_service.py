@@ -10,8 +10,10 @@ from typing import List, Optional
 import structlog
 
 from src.core.exceptions import (
-    ModelNotFoundError,
+    BusinessRuleViolationError,
+    NotFoundError,
     OptimisticLockingError,
+    ServiceException,
     ValidationError,
 )
 from src.core.mappers import ModelMapper
@@ -52,22 +54,22 @@ class ModelService:
         self._model_mapper = model_mapper
 
     async def get_all_models(self) -> List[ModelDTO]:
-        """Retrieve all investment models.
+        """
+        Retrieve all investment models.
 
         Returns:
-            List of ModelDTO objects
+            List[ModelDTO]: List of all models as DTOs
+
+        Raises:
+            ServiceException: If retrieval fails
         """
-        logger.info("Retrieving all investment models")
-
         try:
-            models = await self._model_repository.get_all()
-            logger.info("Retrieved models", count=len(models))
-
+            logger.info("Retrieving all investment models")
+            models = await self._model_repository.list_all()
             return [self._model_mapper.to_dto(model) for model in models]
-
         except Exception as e:
-            logger.error("Failed to retrieve models", error=str(e))
-            raise
+            logger.error(f"Failed to retrieve models: {str(e)}")
+            raise ServiceException(f"Failed to retrieve models: {str(e)}") from e
 
     async def get_model_by_id(self, model_id: str) -> ModelDTO:
         """Retrieve a specific model by ID.
@@ -79,7 +81,7 @@ class ModelService:
             ModelDTO object
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
         """
         logger.info("Retrieving model by ID", model_id=model_id)
 
@@ -87,14 +89,14 @@ class ModelService:
             model = await self._model_repository.get_by_id(model_id)
             if not model:
                 logger.warning("Model not found", model_id=model_id)
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             logger.info(
                 "Model retrieved successfully", model_id=model_id, name=model.name
             )
             return self._model_mapper.to_dto(model)
 
-        except ModelNotFoundError:
+        except NotFoundError:
             raise
         except Exception as e:
             logger.error("Failed to retrieve model", model_id=model_id, error=str(e))
@@ -150,7 +152,7 @@ class ModelService:
             Updated ModelDTO
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
             OptimisticLockingError: If version conflict occurs
             ValidationError: If updated data is invalid
         """
@@ -161,7 +163,7 @@ class ModelService:
             existing_model = await self._model_repository.get_by_id(model_id)
             if not existing_model:
                 logger.warning("Model not found for update", model_id=model_id)
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             # Check version for optimistic locking
             if existing_model.version != update_dto.version:
@@ -193,7 +195,7 @@ class ModelService:
 
             return self._model_mapper.to_dto(saved_model)
 
-        except (ModelNotFoundError, OptimisticLockingError, ValidationError):
+        except (NotFoundError, OptimisticLockingError, ValidationError):
             raise
         except Exception as e:
             logger.error("Failed to update model", model_id=model_id, error=str(e))
@@ -212,7 +214,7 @@ class ModelService:
             Updated ModelDTO
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
             ValidationError: If position data is invalid
         """
         logger.info(
@@ -228,7 +230,7 @@ class ModelService:
                 logger.warning(
                     "Model not found for position addition", model_id=model_id
                 )
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             # Convert position DTO to domain object
             position = self._model_mapper.position_from_dto(position_dto)
@@ -250,7 +252,7 @@ class ModelService:
 
             return self._model_mapper.to_dto(updated_model)
 
-        except (ModelNotFoundError, ValidationError):
+        except (NotFoundError, ValidationError):
             raise
         except Exception as e:
             logger.error(
@@ -274,7 +276,7 @@ class ModelService:
             Updated ModelDTO
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
             ValidationError: If position data is invalid
         """
         logger.info(
@@ -288,7 +290,7 @@ class ModelService:
             model = await self._model_repository.get_by_id(model_id)
             if not model:
                 logger.warning("Model not found for position update", model_id=model_id)
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             # Convert position DTO to domain object
             position = self._model_mapper.position_from_dto(position_dto)
@@ -310,7 +312,7 @@ class ModelService:
 
             return self._model_mapper.to_dto(updated_model)
 
-        except (ModelNotFoundError, ValidationError):
+        except (NotFoundError, ValidationError):
             raise
         except Exception as e:
             logger.error(
@@ -334,7 +336,7 @@ class ModelService:
             Updated ModelDTO
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
             ValidationError: If removal would violate business rules
         """
         logger.info(
@@ -350,7 +352,7 @@ class ModelService:
                 logger.warning(
                     "Model not found for position removal", model_id=model_id
                 )
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             # Remove position from model (domain logic handles validation)
             model.remove_position(position_dto.security_id)
@@ -369,7 +371,7 @@ class ModelService:
 
             return self._model_mapper.to_dto(updated_model)
 
-        except (ModelNotFoundError, ValidationError):
+        except (NotFoundError, ValidationError):
             raise
         except Exception as e:
             logger.error(
@@ -393,7 +395,7 @@ class ModelService:
             Updated ModelDTO
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
             ValidationError: If portfolio data is invalid
         """
         logger.info(
@@ -409,7 +411,7 @@ class ModelService:
                 logger.warning(
                     "Model not found for portfolio addition", model_id=model_id
                 )
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             # Add portfolios to model (domain logic handles validation)
             for portfolio_id in portfolio_dto.portfolios:
@@ -429,7 +431,7 @@ class ModelService:
 
             return self._model_mapper.to_dto(updated_model)
 
-        except (ModelNotFoundError, ValidationError):
+        except (NotFoundError, ValidationError):
             raise
         except Exception as e:
             logger.error("Failed to add portfolios", model_id=model_id, error=str(e))
@@ -448,7 +450,7 @@ class ModelService:
             Updated ModelDTO
 
         Raises:
-            ModelNotFoundError: If model doesn't exist
+            NotFoundError: If model doesn't exist
             ValidationError: If removal would violate business rules
         """
         logger.info(
@@ -464,7 +466,7 @@ class ModelService:
                 logger.warning(
                     "Model not found for portfolio removal", model_id=model_id
                 )
-                raise ModelNotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(f"Model {model_id} not found")
 
             # Remove portfolios from model (domain logic handles validation)
             for portfolio_id in portfolio_dto.portfolios:
@@ -484,7 +486,7 @@ class ModelService:
 
             return self._model_mapper.to_dto(updated_model)
 
-        except (ModelNotFoundError, ValidationError):
+        except (NotFoundError, ValidationError):
             raise
         except Exception as e:
             logger.error("Failed to remove portfolios", model_id=model_id, error=str(e))

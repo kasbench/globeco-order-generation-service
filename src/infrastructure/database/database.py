@@ -127,7 +127,7 @@ class DatabaseManager:
         Raises:
             DatabaseConnectionError: If database is not initialized
         """
-        if not self._is_initialized or not self.database:
+        if not self._is_initialized or self.database is None:
             raise DatabaseConnectionError("Database not initialized")
         return self.database
 

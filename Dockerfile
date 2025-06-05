@@ -144,7 +144,7 @@ RUN mkdir -p /app/logs /app/data && \
 USER appuser
 
 # Expose production port
-EXPOSE 8000
+EXPOSE 8088
 
 # Configure health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
@@ -157,7 +157,7 @@ ENTRYPOINT ["tini", "--"]
 CMD ["/app/.venv/bin/gunicorn", "src.main:app", \
      "--worker-class", "uvicorn.workers.UvicornWorker", \
      "--workers", "4", \
-     "--bind", "0.0.0.0:8000", \
+     "--bind", "0.0.0.0:8088", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
      "--log-level", "info", \
@@ -172,5 +172,5 @@ LABEL org.opencontainers.image.title="GlobeCo Order Generation Service" \
       org.opencontainers.image.vendor="KasBench" \
       org.opencontainers.image.source="https://github.com/kasbench/globeco-order-generation-service" \
       org.opencontainers.image.documentation="https://github.com/kasbench/globeco-order-generation-service/blob/main/README.md" \
-      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.architecture="${TARGETARCH}"

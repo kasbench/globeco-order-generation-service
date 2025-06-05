@@ -1,6 +1,28 @@
 // MongoDB Initialization Script for GlobeCo Order Generation Service
 // Sets up database with proper collections, indexes, and configurations
 
+// Initialize replica set if not already done
+try {
+    print('Checking replica set status...');
+    rs.status();
+    print('Replica set already initialized.');
+} catch (err) {
+    print('Initializing replica set...');
+    rs.initiate({
+        _id: 'rs0',
+        members: [
+            { _id: 0, host: 'globeco-order-generation-service-mongodb:27017' }
+        ]
+    });
+
+    // Wait for primary election
+    print('Waiting for primary election...');
+    while (!rs.isMaster().ismaster) {
+        sleep(100);
+    }
+    print('Primary elected successfully.');
+}
+
 // Switch to the application database
 db = db.getSiblingDB('globeco_dev');
 

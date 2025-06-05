@@ -1,8 +1,6 @@
 # Docker Compose for GlobeCo Order Generation Service Local Development
 # Provides complete development environment with MongoDB and supporting services
 
-version: '3.8'
-
 services:
   # ===================================================================
   # Application Service - Main FastAPI Application
@@ -18,19 +16,19 @@ services:
     image: kasbench/globeco-order-generation-service:dev
     container_name: globeco-app-dev
     ports:
-      - "8000:8000"
+      - "8088:8088"
     environment:
       # Application configuration
       - LOG_LEVEL=DEBUG
       - DEBUG=true
 
       # Database configuration
-      - MONGODB_URL=mongodb://mongodb:27017/globeco_dev
+      - MONGODB_URL=mongodb://globeco-order-generation-service-mongodb:27017/globeco_dev
       - DATABASE_NAME=globeco_dev
 
       # Service configuration
       - HOST=0.0.0.0
-      - PORT=8000
+      - PORT=8088
       - MAX_OPTIMIZATION_TIME=30
       - EXTERNAL_SERVICE_TIMEOUT=10
 
@@ -51,7 +49,7 @@ services:
       # Logs volume for debugging
       - app-logs:/app/logs
     depends_on:
-      mongodb:
+      globeco-order-generation-service-mongodb:
         condition: service_healthy
       mock-services:
         condition: service_started
@@ -59,7 +57,7 @@ services:
       - globeco-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -68,9 +66,9 @@ services:
   # ===================================================================
   # MongoDB Database Service
   # ===================================================================
-  mongodb:
+  globeco-order-generation-service-mongodb:
     image: mongo:7-jammy
-    container_name: globeco-mongodb-dev
+    container_name: globeco-order-generation-service-mongodb
     ports:
       - "27017:27017"
     environment:
@@ -128,13 +126,13 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_SERVER=globeco-order-generation-service-mongodb
       - ME_CONFIG_MONGODB_PORT=27017
       - ME_CONFIG_BASICAUTH_USERNAME=admin
       - ME_CONFIG_BASICAUTH_PASSWORD=admin123
       - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
     depends_on:
-      mongodb:
+      globeco-order-generation-service-mongodb:
         condition: service_healthy
     networks:
       - globeco-network
@@ -216,7 +214,7 @@ x-production-services:
     environment:
       - LOG_LEVEL=INFO
       - DEBUG=false
-      - MONGODB_URL=mongodb://mongodb:27017/globeco_prod
+      - MONGODB_URL=mongodb://globeco-order-generation-service-mongodb:27017/globeco_prod
       - DATABASE_NAME=globeco_prod
     volumes:
       - app-logs:/app/logs

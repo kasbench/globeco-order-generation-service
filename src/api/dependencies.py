@@ -104,7 +104,7 @@ def get_model_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> MongoModelRepository:
     """Get model repository implementation."""
-    return MongoModelRepository(db)
+    return MongoModelRepository()
 
 
 # Mappers

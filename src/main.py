@@ -50,7 +50,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Startup logic
     logger.info("Initializing database connections...")
-    # TODO: Initialize database connections
+    from src.infrastructure.database.database import init_database
+
+    await init_database()
 
     logger.info("Setting up external service clients...")
     # TODO: Initialize external service clients
@@ -61,7 +63,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Shutdown logic
     logger.info("Shutting down application...")
-    # TODO: Close database connections
+    from src.infrastructure.database.database import close_database
+
+    await close_database()
     # TODO: Close external service clients
     logger.info("Application shutdown completed")
 
