@@ -204,7 +204,10 @@ class TestSecurityHeadersMiddleware:
     @pytest.fixture
     def mock_request(self):
         """Create a mock request object."""
-        return Mock(spec=Request)
+        request = Mock(spec=Request)
+        # Mock URL with non-docs path
+        request.url.path = "/api/v1/models"
+        return request
 
     @pytest.fixture
     def mock_response(self):
@@ -223,10 +226,14 @@ class TestSecurityHeadersMiddleware:
         return call_next
 
     @pytest.mark.asyncio
-    async def test_security_headers_added(
-        self, mock_request, mock_call_next, mock_response
+    async def test_security_headers_added_regular_endpoints(
+        self, mock_call_next, mock_response
     ):
-        """Test that all required security headers are added."""
+        """Test that all required security headers are added for regular endpoints."""
+        # Create mock request for regular endpoint
+        mock_request = Mock(spec=Request)
+        mock_request.url.path = "/api/v1/models"
+
         response = await security_headers_middleware(mock_request, mock_call_next)
 
         # Verify all expected security headers are present
@@ -241,6 +248,30 @@ class TestSecurityHeadersMiddleware:
 
         for header, value in expected_headers.items():
             assert response.headers[header] == value
+
+    @pytest.mark.asyncio
+    async def test_security_headers_docs_endpoints(self, mock_call_next, mock_response):
+        """Test that docs endpoints get relaxed CSP headers."""
+        # Create mock request for docs endpoint
+        mock_request = Mock(spec=Request)
+        mock_request.url.path = "/docs"
+
+        response = await security_headers_middleware(mock_request, mock_call_next)
+
+        # Verify relaxed CSP for docs endpoints
+        expected_csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com;"
+        )
+
+        assert response.headers["Content-Security-Policy"] == expected_csp
+
+        # Other headers should remain the same
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Frame-Options"] == "DENY"
 
     @pytest.mark.asyncio
     async def test_security_headers_not_overwritten(self, mock_request, mock_call_next):
