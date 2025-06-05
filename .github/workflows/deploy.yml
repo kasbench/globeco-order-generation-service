@@ -1,0 +1,374 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      image_tag:
+        description: 'Docker image tag'
+        required: true
+        default: 'latest'
+      dry_run:
+        description: 'Perform dry run deployment'
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+
+env:
+  IMAGE_NAME: kasbench/globeco-order-generation-service
+  KUBECTL_VERSION: '1.28'
+
+jobs:
+  # Pre-deployment validation
+  pre-deployment:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    outputs:
+      environment: ${{ steps.validate.outputs.environment }}
+      namespace: ${{ steps.validate.outputs.namespace }}
+      image_tag: ${{ steps.validate.outputs.image_tag }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate inputs
+      id: validate
+      run: |
+        # Validate environment
+        ENVIRONMENT="${{ inputs.environment }}"
+        if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
+          echo "Error: Invalid environment '$ENVIRONMENT'. Must be 'staging' or 'production'."
+          exit 1
+        fi
+
+        # Set namespace based on environment
+        if [[ "$ENVIRONMENT" == "staging" ]]; then
+          NAMESPACE="globeco-staging"
+        else
+          NAMESPACE="globeco"
+        fi
+
+        IMAGE_TAG="${{ inputs.image_tag }}"
+        echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+        echo "namespace=$NAMESPACE" >> $GITHUB_OUTPUT
+        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+        echo "Validated deployment parameters:"
+        echo "  Environment: $ENVIRONMENT"
+        echo "  Namespace: $NAMESPACE"
+        echo "  Image Tag: $IMAGE_TAG"
+        echo "  Dry Run: ${{ inputs.dry_run }}"
+
+    - name: Verify Docker image exists
+      run: |
+        # Check if the specified image tag exists on Docker Hub
+        IMAGE_TAG="${{ inputs.image_tag }}"
+        echo "Checking if image exists: ${{ env.IMAGE_NAME }}:$IMAGE_TAG"
+
+        # Use docker manifest to check if image exists
+        if docker manifest inspect "${{ env.IMAGE_NAME }}:$IMAGE_TAG" >/dev/null 2>&1; then
+          echo "✅ Image ${{ env.IMAGE_NAME }}:$IMAGE_TAG exists"
+        else
+          echo "❌ Image ${{ env.IMAGE_NAME }}:$IMAGE_TAG not found"
+          echo "Available tags can be found at: https://hub.docker.com/r/kasbench/globeco-order-generation-service/tags"
+          exit 1
+        fi
+
+    - name: Validate Kubernetes manifests
+      run: |
+        # Set up kubectl for validation
+        curl -LO "https://dl.k8s.io/release/v${{ env.KUBECTL_VERSION }}.0/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+
+        # Validate all manifests
+        echo "Validating Kubernetes manifests..."
+        for file in deployments/*.yaml; do
+          echo "Validating $file..."
+          kubectl apply --dry-run=client -f "$file" || {
+            echo "❌ Validation failed for $file"
+            exit 1
+          }
+        done
+        echo "✅ All Kubernetes manifests are valid"
+
+  # Staging deployment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: pre-deployment
+    if: needs.pre-deployment.outputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://order-generation-staging.globeco.kasbench.org
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+
+    - name: Configure kubectl for staging
+      run: |
+        # Configure kubectl context for staging cluster
+        # Note: In a real setup, you'd configure actual cluster credentials here
+        echo "Configuring kubectl for staging environment..."
+        echo "Namespace: ${{ needs.pre-deployment.outputs.namespace }}"
+
+        # Create namespace if it doesn't exist (dry-run safe)
+        kubectl create namespace ${{ needs.pre-deployment.outputs.namespace }} --dry-run=client -o yaml | \
+          kubectl apply -f - || echo "Namespace already exists"
+
+    - name: Deploy to staging
+      run: |
+        cd deployments
+
+        # Update image tag in kustomization
+        if command -v kustomize >/dev/null 2>&1; then
+          kustomize edit set image "${{ env.IMAGE_NAME }}:${{ needs.pre-deployment.outputs.image_tag }}"
+        fi
+
+        # Update namespace for staging
+        sed -i "s/namespace: globeco/namespace: ${{ needs.pre-deployment.outputs.namespace }}/g" *.yaml
+
+        if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+          echo "🔍 DRY RUN: Would deploy the following to staging:"
+          if command -v kustomize >/dev/null 2>&1; then
+            kustomize build . | kubectl apply --dry-run=client -f -
+          else
+            kubectl apply --dry-run=client -f .
+          fi
+        else
+          echo "🚀 Deploying to staging environment..."
+          if command -v kustomize >/dev/null 2>&1; then
+            kustomize build . | kubectl apply -f -
+          else
+            kubectl apply -f .
+          fi
+        fi
+
+    - name: Wait for staging deployment
+      if: inputs.dry_run != true
+      run: |
+        echo "⏳ Waiting for staging deployment to be ready..."
+        kubectl rollout status deployment/globeco-order-generation-service \
+          -n ${{ needs.pre-deployment.outputs.namespace }} \
+          --timeout=300s
+
+    - name: Verify staging deployment
+      if: inputs.dry_run != true
+      run: |
+        echo "🔍 Verifying staging deployment..."
+
+        # Check if pods are running
+        kubectl get pods -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -l app=globeco-order-generation-service
+
+        # Check service endpoints
+        kubectl get services -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -l app=globeco-order-generation-service
+
+        # Test health endpoint (if accessible)
+        echo "Health check validation would be performed here"
+
+  # Production deployment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: pre-deployment
+    if: needs.pre-deployment.outputs.environment == 'production'
+    environment:
+      name: production
+      url: https://order-generation.globeco.kasbench.org
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+
+    - name: Configure kubectl for production
+      run: |
+        # Configure kubectl context for production cluster
+        echo "Configuring kubectl for production environment..."
+        echo "Namespace: ${{ needs.pre-deployment.outputs.namespace }}"
+
+    - name: Pre-production checks
+      run: |
+        echo "🔍 Running pre-production checks..."
+
+        # Verify current production deployment
+        if kubectl get deployment globeco-order-generation-service -n ${{ needs.pre-deployment.outputs.namespace }} >/dev/null 2>&1; then
+          echo "Current production deployment found"
+          kubectl describe deployment globeco-order-generation-service -n ${{ needs.pre-deployment.outputs.namespace }}
+        else
+          echo "No existing production deployment found"
+        fi
+
+        # Check cluster resources
+        echo "Cluster resource check:"
+        kubectl top nodes || echo "Metrics server not available"
+
+    - name: Deploy to production
+      run: |
+        cd deployments
+
+        # Apply production patches
+        echo "📦 Applying production configuration..."
+
+        # Update image tag
+        if command -v kustomize >/dev/null 2>&1; then
+          kustomize edit set image "${{ env.IMAGE_NAME }}:${{ needs.pre-deployment.outputs.image_tag }}"
+        fi
+
+        if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+          echo "🔍 DRY RUN: Would deploy the following to production:"
+          if command -v kustomize >/dev/null 2>&1; then
+            kustomize build . | kubectl apply --dry-run=client -f -
+          else
+            kubectl apply --dry-run=client -f .
+          fi
+        else
+          echo "🚀 Deploying to production environment..."
+
+          # Create backup of current deployment
+          kubectl get deployment globeco-order-generation-service \
+            -n ${{ needs.pre-deployment.outputs.namespace }} \
+            -o yaml > deployment-backup.yaml || echo "No existing deployment to backup"
+
+          # Apply new deployment
+          if command -v kustomize >/dev/null 2>&1; then
+            kustomize build . | kubectl apply -f -
+          else
+            kubectl apply -f .
+          fi
+        fi
+
+    - name: Wait for production deployment
+      if: inputs.dry_run != true
+      run: |
+        echo "⏳ Waiting for production deployment to be ready..."
+        kubectl rollout status deployment/globeco-order-generation-service \
+          -n ${{ needs.pre-deployment.outputs.namespace }} \
+          --timeout=600s
+
+    - name: Verify production deployment
+      if: inputs.dry_run != true
+      run: |
+        echo "🔍 Verifying production deployment..."
+
+        # Check deployment status
+        kubectl get deployment globeco-order-generation-service \
+          -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -o wide
+
+        # Check pod status
+        kubectl get pods -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -l app=globeco-order-generation-service \
+          -o wide
+
+        # Check HPA status
+        kubectl get hpa -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -l app=globeco-order-generation-service || echo "HPA not found"
+
+        # Verify services
+        kubectl get services -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -l app=globeco-order-generation-service
+
+    - name: Smoke tests
+      if: inputs.dry_run != true
+      run: |
+        echo "🧪 Running post-deployment smoke tests..."
+
+        # Get service endpoint
+        SERVICE_IP=$(kubectl get service globeco-order-generation-service \
+          -n ${{ needs.pre-deployment.outputs.namespace }} \
+          -o jsonpath='{.spec.clusterIP}')
+
+        if [[ -n "$SERVICE_IP" ]]; then
+          echo "Service IP: $SERVICE_IP"
+          # In a real setup, you'd run actual health checks here
+          echo "Smoke tests would be performed against the service"
+        else
+          echo "Could not retrieve service IP"
+        fi
+
+    - name: Upload deployment artifacts
+      if: always() && inputs.dry_run != true
+      uses: actions/upload-artifact@v4
+      with:
+        name: production-deployment-artifacts
+        path: |
+          deployment-backup.yaml
+        retention-days: 30
+
+  # Post-deployment monitoring
+  post-deployment:
+    name: Post-deployment Monitoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [pre-deployment, deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+
+    steps:
+    - name: Set up monitoring
+      run: |
+        echo "🔍 Setting up post-deployment monitoring..."
+        echo "Environment: ${{ needs.pre-deployment.outputs.environment }}"
+        echo "Image Tag: ${{ needs.pre-deployment.outputs.image_tag }}"
+
+        # In a real setup, you'd configure monitoring alerts here
+        echo "Monitoring alerts would be configured for:"
+        echo "  - Application health endpoints"
+        echo "  - Pod restart counts"
+        echo "  - Resource utilization"
+        echo "  - Error rates"
+
+    - name: Deployment summary
+      run: |
+        echo "📊 Deployment Summary"
+        echo "===================="
+        echo "Environment: ${{ needs.pre-deployment.outputs.environment }}"
+        echo "Namespace: ${{ needs.pre-deployment.outputs.namespace }}"
+        echo "Image: ${{ env.IMAGE_NAME }}:${{ needs.pre-deployment.outputs.image_tag }}"
+        echo "Dry Run: ${{ inputs.dry_run }}"
+        echo "Status: ${{ needs.deploy-staging.result || needs.deploy-production.result }}"
+        echo ""
+
+        if [[ "${{ needs.pre-deployment.outputs.environment }}" == "production" ]]; then
+          echo "🌐 Production URL: https://order-generation.globeco.kasbench.org"
+          echo "📊 Health Check: https://order-generation.globeco.kasbench.org/health/health"
+          echo "📚 API Docs: https://order-generation.globeco.kasbench.org/docs"
+        else
+          echo "🌐 Staging URL: https://order-generation-staging.globeco.kasbench.org"
+        fi
