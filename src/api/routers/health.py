@@ -68,20 +68,29 @@ class HealthCheck:
             Dictionary with database health status
         """
         try:
-            # TODO: Implement actual database connectivity check
-            # For now, return healthy status
-            return {
-                "status": "healthy",
-                "message": "Database connection successful",
-                "response_time_ms": 5.0,
-            }
+            from src.infrastructure.database.database import health_check_database
+
+            database_healthy = await health_check_database()
+
+            if database_healthy:
+                database_check = {
+                    "status": "healthy",
+                    "message": "Database connection operational",
+                }
+            else:
+                database_check = {
+                    "status": "unhealthy",
+                    "message": "Database connection failed",
+                }
+                overall_status = "unhealthy"
         except Exception as e:
-            logger.error("Database health check failed", error=str(e))
-            return {
+            database_check = {
                 "status": "unhealthy",
-                "message": f"Database connection failed: {e}",
-                "response_time_ms": None,
+                "message": f"Database check error: {str(e)}",
             }
+            overall_status = "unhealthy"
+
+        return database_check
 
     async def check_external_services(self) -> dict[str, Any]:
         """
@@ -90,77 +99,110 @@ class HealthCheck:
         Returns:
             Dictionary with external services health status
         """
-        services = {
-            "portfolio_accounting": "Portfolio Accounting Service",
-            "pricing": "Pricing Service",
-            "portfolio": "Portfolio Service",
-            "security": "Security Service",
-        }
+        try:
+            from src.api.dependencies import (
+                get_portfolio_accounting_client,
+                get_portfolio_client,
+                get_pricing_client,
+                get_security_client,
+            )
 
-        service_status = {}
+            # Get service clients
+            portfolio_accounting_client = get_portfolio_accounting_client()
+            pricing_client = get_pricing_client()
+            portfolio_client = get_portfolio_client()
+            security_client = get_security_client()
 
-        for service_key, service_name in services.items():
+            # Check each service
+            services_status = {}
+
+            # Portfolio Accounting Service
             try:
-                # TODO: Implement actual service connectivity checks
-                # For now, return healthy status
-                service_status[service_key] = {
+                portfolio_health = await portfolio_accounting_client.health_check()
+                services_status["portfolio_accounting"] = {
                     "status": "healthy",
-                    "message": f"{service_name} reachable",
-                    "response_time_ms": 10.0,
+                    "message": "Service operational",
                 }
             except Exception as e:
-                logger.warning(f"{service_name} health check failed", error=str(e))
-                service_status[service_key] = {
+                services_status["portfolio_accounting"] = {
                     "status": "unhealthy",
-                    "message": f"{service_name} unreachable: {e}",
-                    "response_time_ms": None,
+                    "message": f"Service unreachable: {str(e)}",
                 }
 
-        # Overall status is healthy if all services are healthy
-        all_healthy = all(
-            status["status"] == "healthy" for status in service_status.values()
-        )
+            # Pricing Service
+            try:
+                pricing_health = await pricing_client.health_check()
+                services_status["pricing"] = {
+                    "status": "healthy",
+                    "message": "Service operational",
+                }
+            except Exception as e:
+                services_status["pricing"] = {
+                    "status": "unhealthy",
+                    "message": f"Service unreachable: {str(e)}",
+                }
 
-        return {
-            "status": "healthy" if all_healthy else "degraded",
-            "services": service_status,
-        }
+            # Portfolio Service
+            try:
+                portfolio_svc_health = await portfolio_client.health_check()
+                services_status["portfolio"] = {
+                    "status": "healthy",
+                    "message": "Service operational",
+                }
+            except Exception as e:
+                services_status["portfolio"] = {
+                    "status": "unhealthy",
+                    "message": f"Service unreachable: {str(e)}",
+                }
+
+            # Security Service
+            try:
+                security_health = await security_client.health_check()
+                services_status["security"] = {
+                    "status": "healthy",
+                    "message": "Service operational",
+                }
+            except Exception as e:
+                services_status["security"] = {
+                    "status": "unhealthy",
+                    "message": f"Service unreachable: {str(e)}",
+                }
+
+            return services_status
+
+        except Exception as e:
+            logger.error("External services health check failed", error=str(e))
+            return {"error": f"External services check failed: {str(e)}"}
 
     async def check_optimization_engine(self) -> dict[str, Any]:
-        """
-        Check optimization engine availability.
-
-        Returns:
-            Dictionary with optimization engine health status
-        """
+        """Check CVXPY optimization engine health."""
         try:
-            # TODO: Implement actual CVXPY solver check
-            # For now, return healthy status
-            import cvxpy as cp
+            from src.api.dependencies import get_optimization_engine
 
-            # Simple test problem to verify CVXPY is working
-            x = cp.Variable()
-            problem = cp.Problem(cp.Minimize(cp.square(x - 1)))
-            problem.solve(verbose=False)
+            optimization_engine = get_optimization_engine()
 
-            if problem.status == "optimal":
+            # Perform a simple test optimization to verify solver is working
+            is_healthy = await optimization_engine.check_solver_health()
+
+            if is_healthy:
                 return {
                     "status": "healthy",
                     "message": "Optimization engine operational",
-                    "solver_status": problem.status,
+                    "solver_status": "optimal",
                 }
             else:
                 return {
                     "status": "unhealthy",
-                    "message": "Optimization engine test failed",
-                    "solver_status": problem.status,
+                    "message": "Optimization engine failed health check",
+                    "solver_status": "failed",
                 }
+
         except Exception as e:
             logger.error("Optimization engine health check failed", error=str(e))
             return {
                 "status": "unhealthy",
-                "message": f"Optimization engine error: {e}",
-                "solver_status": None,
+                "message": f"Optimization engine error: {str(e)}",
+                "solver_status": "error",
             }
 
     async def get_health_status(
@@ -197,15 +239,26 @@ class HealthCheck:
             if isinstance(check, dict) and "status" in check
         )
 
-        # Handle degraded external services
-        external_degraded = (
-            "external_services" in checks
-            and checks["external_services"]["status"] == "degraded"
-        )
+        # Handle degraded external services - check if any external service is unhealthy
+        external_services_unhealthy = False
+        if "external_services" in checks:
+            external_services = checks["external_services"]
+            # Check if it contains an error or if any individual service is unhealthy
+            if "error" in external_services:
+                external_services_unhealthy = True
+            else:
+                # Check individual services
+                for service_name, service_status in external_services.items():
+                    if (
+                        isinstance(service_status, dict)
+                        and service_status.get("status") == "unhealthy"
+                    ):
+                        external_services_unhealthy = True
+                        break
 
         if all_checks_healthy:
             overall_status = "healthy"
-        elif external_degraded and checks["database"]["status"] == "healthy":
+        elif external_services_unhealthy and checks["database"]["status"] == "healthy":
             # Service can still operate with degraded external services
             overall_status = "healthy"
         else:

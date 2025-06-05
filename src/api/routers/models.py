@@ -23,7 +23,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import ValidationError
 
 from src.api.dependencies import get_model_service
-from src.core.exceptions import NotFoundError, OptimisticLockingError
+from src.core.exceptions import (
+    ModelNotFoundError,
+    NotFoundError,
+    OptimisticLockingError,
+)
 from src.core.exceptions import ValidationError as DomainValidationError
 from src.core.services.model_service import ModelService
 from src.schemas.models import (
@@ -79,6 +83,11 @@ async def get_model_by_id(
     except HTTPException:
         # Re-raise HTTPExceptions from validate_model_id without changing them
         raise
+    except ModelNotFoundError:
+        logger.warning("Model not found", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Model {model_id} not found"
+        )
     except NotFoundError:
         logger.warning("Model not found", model_id=model_id)
         raise HTTPException(
@@ -127,6 +136,11 @@ async def update_model(
     try:
         validate_model_id(model_id)
         return await model_service.update_model(model_id, model_data)
+    except ModelNotFoundError:
+        logger.warning("Model not found for update", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Model {model_id} not found"
+        )
     except NotFoundError:
         logger.warning("Model not found for update", model_id=model_id)
         raise HTTPException(

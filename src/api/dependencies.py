@@ -82,7 +82,7 @@ def get_security_client() -> SecurityServiceClient:
 def get_optimization_engine() -> CVXPYOptimizationEngine:
     """Get optimization engine implementation."""
     settings = get_settings()
-    return CVXPYOptimizationEngine(timeout_seconds=settings.optimization_timeout)
+    return CVXPYOptimizationEngine(default_timeout=settings.optimization_timeout)
 
 
 @lru_cache()

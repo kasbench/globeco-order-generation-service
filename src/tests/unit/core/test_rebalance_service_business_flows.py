@@ -154,7 +154,7 @@ class TestRebalanceServiceBusinessFlows:
         )
 
         # Setup mocks
-        mock_model_repository.get_all.return_value = [sample_investment_model]
+        mock_model_repository.list_all.return_value = [sample_investment_model]
         mock_portfolio_client.get_positions.return_value = current_positions
         mock_pricing_client.get_prices.return_value = prices
         mock_optimization_engine.optimize_portfolio.return_value = optimization_result
@@ -188,7 +188,7 @@ class TestRebalanceServiceBusinessFlows:
         assert buy_transactions[0].quantity == 100  # Buy 100 shares (200 -> 300)
 
         # Verify all service interactions
-        mock_model_repository.get_all.assert_called_once()
+        mock_model_repository.list_all.assert_called_once()
         mock_portfolio_client.get_positions.assert_called_once_with(portfolio_id)
         mock_pricing_client.get_prices.assert_called_once()
         mock_optimization_engine.optimize_portfolio.assert_called_once()
@@ -202,7 +202,7 @@ class TestRebalanceServiceBusinessFlows:
         """Test handling when portfolio doesn't have an associated model."""
         # Arrange - Business scenario: Portfolio without investment model
         portfolio_id = "orphaned_portfolio"
-        mock_model_repository.get_all.return_value = []
+        mock_model_repository.list_all.return_value = []
 
         # Act & Assert - Should raise appropriate business exception
         with pytest.raises(PortfolioNotFoundError) as exc_info:
@@ -225,7 +225,7 @@ class TestRebalanceServiceBusinessFlows:
         # Arrange - Business scenario: External service outage
         portfolio_id = "123456789012345678901234"
 
-        mock_model_repository.get_all.return_value = [sample_investment_model]
+        mock_model_repository.list_all.return_value = [sample_investment_model]
         mock_portfolio_client.get_positions.side_effect = ExternalServiceError(
             "Portfolio Accounting Service unavailable"
         )
@@ -253,7 +253,7 @@ class TestRebalanceServiceBusinessFlows:
         current_positions = {"TECH123456789012345678AB": 1000}
         prices = {"TECH123456789012345678AB": Decimal("100.00")}
 
-        mock_model_repository.get_all.return_value = [sample_investment_model]
+        mock_model_repository.list_all.return_value = [sample_investment_model]
         mock_portfolio_client.get_positions.return_value = current_positions
         mock_pricing_client.get_prices.return_value = prices
         mock_optimization_engine.optimize_portfolio.side_effect = OptimizationError(
@@ -313,7 +313,7 @@ class TestRebalanceServiceBusinessFlows:
 
         # Setup mocks for multi-portfolio scenario
         mock_model_repository.get_by_id.return_value = sample_investment_model
-        mock_model_repository.get_all.return_value = [sample_investment_model]
+        mock_model_repository.list_all.return_value = [sample_investment_model]
 
         def get_positions_side_effect(portfolio_id):
             if portfolio_id == "123456789012345678901234":
@@ -378,7 +378,7 @@ class TestRebalanceServiceBusinessFlows:
         )
 
         # Setup mocks
-        mock_model_repository.get_all.return_value = [sample_investment_model]
+        mock_model_repository.list_all.return_value = [sample_investment_model]
         mock_portfolio_client.get_positions.return_value = current_positions
         mock_pricing_client.get_prices.return_value = prices
         mock_optimization_engine.optimize_portfolio.return_value = optimization_result

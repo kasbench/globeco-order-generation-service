@@ -89,7 +89,11 @@ class ModelService:
             model = await self._model_repository.get_by_id(model_id)
             if not model:
                 logger.warning("Model not found", model_id=model_id)
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             logger.info(
                 "Model retrieved successfully", model_id=model_id, name=model.name
@@ -163,7 +167,11 @@ class ModelService:
             existing_model = await self._model_repository.get_by_id(model_id)
             if not existing_model:
                 logger.warning("Model not found for update", model_id=model_id)
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             # Check version for optimistic locking
             if existing_model.version != update_dto.version:
@@ -230,7 +238,11 @@ class ModelService:
                 logger.warning(
                     "Model not found for position addition", model_id=model_id
                 )
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             # Convert position DTO to domain object
             position = self._model_mapper.position_from_dto(position_dto)
@@ -290,7 +302,11 @@ class ModelService:
             model = await self._model_repository.get_by_id(model_id)
             if not model:
                 logger.warning("Model not found for position update", model_id=model_id)
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             # Convert position DTO to domain object
             position = self._model_mapper.position_from_dto(position_dto)
@@ -352,7 +368,11 @@ class ModelService:
                 logger.warning(
                     "Model not found for position removal", model_id=model_id
                 )
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             # Remove position from model (domain logic handles validation)
             model.remove_position(position_dto.security_id)
@@ -411,7 +431,11 @@ class ModelService:
                 logger.warning(
                     "Model not found for portfolio addition", model_id=model_id
                 )
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             # Add portfolios to model (domain logic handles validation)
             for portfolio_id in portfolio_dto.portfolios:
@@ -466,7 +490,11 @@ class ModelService:
                 logger.warning(
                     "Model not found for portfolio removal", model_id=model_id
                 )
-                raise NotFoundError(f"Model {model_id} not found")
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
 
             # Remove portfolios from model (domain logic handles validation)
             for portfolio_id in portfolio_dto.portfolios:

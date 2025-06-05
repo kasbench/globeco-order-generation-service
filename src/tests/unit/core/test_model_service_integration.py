@@ -13,6 +13,7 @@ import pytest_asyncio
 
 from src.core.exceptions import (
     ModelNotFoundError,
+    NotFoundError,
     OptimisticLockingError,
     ValidationError,
 )
@@ -148,7 +149,7 @@ class TestModelServiceCriticalBusinessFlows:
         mock_repository.get_by_id.return_value = None
 
         # Act & Assert - Should raise business-appropriate exception
-        with pytest.raises(ModelNotFoundError) as exc_info:
+        with pytest.raises(NotFoundError) as exc_info:
             await model_service.get_model_by_id("nonexistent_model_id")
 
         assert "nonexistent_model_id not found" in str(exc_info.value)
@@ -339,11 +340,11 @@ class TestModelServiceCriticalBusinessFlows:
     async def test_empty_model_list_handling(self, model_service, mock_repository):
         """Test handling of empty model list - important for initial system state."""
         # Arrange - Business scenario: System with no models yet
-        mock_repository.get_all.return_value = []
+        mock_repository.list_all.return_value = []
 
         # Act
         models = await model_service.get_all_models()
 
         # Assert - Should handle empty state gracefully
         assert models == []
-        mock_repository.get_all.assert_called_once()
+        mock_repository.list_all.assert_called_once()

@@ -100,10 +100,25 @@ class TestApplicationLifecycle:
         """Test application startup sequence."""
         app = create_app()
 
-        with patch("src.main.logger") as mock_logger:
+        with (
+            patch("src.main.logger") as mock_logger,
+            patch("src.infrastructure.database.database.init_database") as mock_init_db,
+            patch(
+                "src.infrastructure.database.database.close_database"
+            ) as mock_close_db,
+        ):
+
+            # Configure mocks to be async
+            mock_init_db.return_value = None
+            mock_close_db.return_value = None
+
             # Simulate application startup
             async with app.router.lifespan_context(app):
                 pass
+
+            # Verify database initialization was called
+            mock_init_db.assert_called_once()
+            mock_close_db.assert_called_once()
 
             # Verify startup logging
             mock_logger.info.assert_any_call(
@@ -120,7 +135,18 @@ class TestApplicationLifecycle:
         """Test application shutdown sequence."""
         app = create_app()
 
-        with patch("src.main.logger") as mock_logger:
+        with (
+            patch("src.main.logger") as mock_logger,
+            patch("src.infrastructure.database.database.init_database") as mock_init_db,
+            patch(
+                "src.infrastructure.database.database.close_database"
+            ) as mock_close_db,
+        ):
+
+            # Configure mocks to be async
+            mock_init_db.return_value = None
+            mock_close_db.return_value = None
+
             # Simulate application lifecycle
             async with app.router.lifespan_context(app):
                 pass
@@ -133,7 +159,18 @@ class TestApplicationLifecycle:
         """Test application startup behavior with TestClient."""
         app = create_app()
 
-        with patch("src.main.logger") as mock_logger:
+        with (
+            patch("src.main.logger") as mock_logger,
+            patch("src.infrastructure.database.database.init_database") as mock_init_db,
+            patch(
+                "src.infrastructure.database.database.close_database"
+            ) as mock_close_db,
+        ):
+
+            # Configure mocks to be async
+            mock_init_db.return_value = None
+            mock_close_db.return_value = None
+
             # Creating TestClient triggers startup
             with TestClient(app):
                 pass

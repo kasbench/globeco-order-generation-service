@@ -80,6 +80,11 @@ class Settings(BaseSettings):
         description="Security Service base URL",
     )
 
+    order_service_url: str = Field(
+        default="http://globeco-order-service:8081",
+        description="Order Service base URL",
+    )
+
     # External Service Configuration
     external_service_timeout: int = Field(
         default=10, description="Timeout for external service calls in seconds"

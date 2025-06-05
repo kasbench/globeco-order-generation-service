@@ -55,7 +55,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await init_database()
 
     logger.info("Setting up external service clients...")
-    # TODO: Initialize external service clients
+    # External service clients are managed through dependency injection with @lru_cache()
+    # and HTTP clients that don't require explicit initialization or connection pooling.
+    # Circuit breaker patterns and retry logic are handled within each client implementation.
+    logger.info("External service clients configured via dependency injection")
 
     logger.info("Application startup completed")
 
@@ -66,7 +69,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from src.infrastructure.database.database import close_database
 
     await close_database()
-    # TODO: Close external service clients
+    # External service clients are HTTP-based and don't require explicit cleanup
+    # The dependency injection system handles their lifecycle automatically
     logger.info("Application shutdown completed")
 
 
@@ -240,9 +244,82 @@ def create_app() -> FastAPI:
     from src.core.exceptions import (
         BusinessRuleViolationError,
         ExternalServiceError,
+        ModelNotFoundError,
+        NotFoundError,
         OptimizationError,
+        PortfolioNotFoundError,
         ValidationError,
     )
+
+    @app.exception_handler(NotFoundError)
+    async def not_found_exception_handler(request: Request, exc: NotFoundError):
+        """Handle not found errors."""
+        logger.warning(
+            "Resource not found",
+            error_code=exc.error_code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": exc.error_code,
+                    "message": exc.message,
+                    "details": exc.details,
+                    **create_response_metadata(),
+                }
+            },
+        )
+
+    @app.exception_handler(ModelNotFoundError)
+    async def model_not_found_exception_handler(
+        request: Request, exc: ModelNotFoundError
+    ):
+        """Handle model not found errors."""
+        logger.warning(
+            "Model not found",
+            error_code=exc.error_code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": exc.error_code,
+                    "message": exc.message,
+                    "details": exc.details,
+                    **create_response_metadata(),
+                }
+            },
+        )
+
+    @app.exception_handler(PortfolioNotFoundError)
+    async def portfolio_not_found_exception_handler(
+        request: Request, exc: PortfolioNotFoundError
+    ):
+        """Handle portfolio not found errors."""
+        logger.warning(
+            "Portfolio not found",
+            error_code=exc.error_code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": exc.error_code,
+                    "message": exc.message,
+                    "details": exc.details,
+                    **create_response_metadata(),
+                }
+            },
+        )
 
     @app.exception_handler(ValidationError)
     async def validation_exception_handler(request: Request, exc: ValidationError):
