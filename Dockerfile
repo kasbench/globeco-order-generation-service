@@ -16,7 +16,11 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src \
+    PORT=8088 \
+    HOST=0.0.0.0 \
+    CORS_ORIGINS="*" \
+    LOG_LEVEL=INFO
 
 # Install system dependencies required for both architectures
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -70,14 +74,14 @@ COPY --chown=appuser:appuser . .
 USER appuser
 
 # Expose development port
-EXPOSE 8000
+EXPOSE 8088
 
 # Health check for development
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health/live || exit 1
+    CMD curl -f http://localhost:8088/health/live || exit 1
 
-# Development command with auto-reload
-CMD ["/app/.venv/bin/uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Development command with auto-reload (uses environment PORT or defaults to 8088)
+CMD /app/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8088} --reload
 
 # ===================================================================
 # Testing Stage: Run tests and security scanning
@@ -148,23 +152,23 @@ EXPOSE 8088
 
 # Configure health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD /app/.venv/bin/python -c "import requests; requests.get('http://localhost:8000/health/live', timeout=5)" || exit 1
+    CMD /app/.venv/bin/python -c "import requests; requests.get('http://globeco-order-generation-service:8088/health/live', timeout=5)" || exit 1
 
 # Production entrypoint with proper signal handling
 ENTRYPOINT ["tini", "--"]
 
-# Production command with Gunicorn for better performance
-CMD ["/app/.venv/bin/gunicorn", "src.main:app", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--workers", "4", \
-     "--bind", "0.0.0.0:8088", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--log-level", "info", \
-     "--timeout", "30", \
-     "--keep-alive", "2", \
-     "--max-requests", "1000", \
-     "--max-requests-jitter", "100"]
+# Production command with Gunicorn for better performance (uses environment PORT or defaults to 8088)
+CMD /app/.venv/bin/gunicorn src.main:app \
+     --worker-class uvicorn.workers.UvicornWorker \
+     --workers 4 \
+     --bind 0.0.0.0:${PORT:-8088} \
+     --access-logfile - \
+     --error-logfile - \
+     --log-level info \
+     --timeout 30 \
+     --keep-alive 2 \
+     --max-requests 1000 \
+     --max-requests-jitter 100
 
 # Metadata labels for multi-architecture support
 LABEL org.opencontainers.image.title="GlobeCo Order Generation Service" \

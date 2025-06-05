@@ -8,6 +8,82 @@ This file documents all interactions with the Cursor AI Assistant and the action
 
 ---
 
+## Swagger UI Blank Page Fix - Content Security Policy Configuration
+
+**Date:** 2024-12-23
+**Prompt:** "The blank swagger issue is still present. The OpenAPI JSON endpoint and health check are fine"
+
+**Issue Identified:**
+Despite previous Dockerfile port configuration fixes, Swagger UI was still displaying a blank page while OpenAPI JSON (`/openapi.json`) and health endpoints were working correctly.
+
+**Root Cause Analysis:**
+The issue was caused by the Content Security Policy (CSP) header being too restrictive:
+```python
+"Content-Security-Policy": "default-src 'self'"
+```
+
+**Problem Details:**
+- **CSP Blocking External Resources**: Swagger UI requires external CSS and JavaScript files from CDNs (jsdelivr.net, unpkg.com)
+- **Security Headers Middleware**: The `security_headers_middleware` in `src/main.py` was applying strict CSP to all endpoints
+- **External Dependencies**: Swagger UI loads resources from external domains which were blocked by `default-src 'self'`
+- **Application Working**: Core FastAPI functionality was working (OpenAPI JSON, health checks) but UI rendering was blocked
+
+**Investigation Process:**
+1. **Verified Application Health**: Confirmed OpenAPI JSON endpoint and health checks working
+2. **Identified Security Headers**: Found SecurityHeaders.get_default_headers() applying strict CSP
+3. **Analyzed Middleware**: Located security_headers_middleware applying headers to all responses
+4. **Root Cause Found**: CSP blocking external Swagger UI resources
+
+**Solution Applied:**
+Updated `security_headers_middleware` in `src/main.py` to allow external resources specifically for Swagger UI endpoints:
+
+```python
+async def security_headers_middleware(request: Request, call_next):
+    # ... existing code ...
+
+    # Special CSP for Swagger UI endpoints to allow external resources
+    if request.url.path in ["/docs", "/redoc"] or request.url.path.startswith("/docs/") or request.url.path.startswith("/redoc/"):
+        security_headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com;"
+        )
+```
+
+**Technical Details:**
+- **Selective CSP Relaxation**: Only relaxes CSP for documentation endpoints (`/docs`, `/redoc`)
+- **Maintains Security**: Keeps strict CSP for all other endpoints
+- **External CDN Support**: Allows Swagger UI to load from jsdelivr.net and unpkg.com
+- **Inline Script Support**: Enables 'unsafe-inline' for Swagger UI JavaScript execution
+- **Font/Image Support**: Allows fonts and images from external sources for UI rendering
+
+**Security Considerations:**
+- **Minimal Scope**: CSP relaxation only applies to documentation endpoints
+- **Whitelisted Domains**: Only allows specific trusted CDNs (jsdelivr.net, unpkg.com)
+- **Production Appropriate**: Suitable for benchmarking research platform use case
+- **API Security Maintained**: Core API endpoints maintain strict security headers
+
+**Files Modified:**
+- `src/main.py` - Updated security_headers_middleware with conditional CSP
+
+**Expected Result:**
+- Swagger UI at `/docs` should now load properly with full interface
+- ReDoc at `/redoc` should also work correctly
+- All other endpoints maintain strict security headers
+- OpenAPI JSON and health endpoints continue working as before
+
+**Business Impact:**
+- **Developer Experience**: Restores full Swagger UI functionality for API exploration
+- **Documentation Access**: Enables interactive API documentation for development and testing
+- **Security Balance**: Maintains security posture while enabling necessary UI functionality
+- **Research Platform Ready**: Swagger UI accessible for benchmarking and development use
+
+This fix resolves the blank Swagger UI issue while maintaining appropriate security measures for the production-ready benchmarking platform.
+
+---
+
 ## CI/CD Pipeline Testing Fix - Pytest Execution
 
 **Date:** 2024-12-23

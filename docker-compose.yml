@@ -16,7 +16,7 @@ services:
     image: kasbench/globeco-order-generation-service:dev
     container_name: globeco-app-dev
     ports:
-      - "8088:8088"
+      - "8189:8088"
     environment:
       # Application configuration
       - LOG_LEVEL=DEBUG
@@ -34,7 +34,7 @@ services:
 
       # Security (development only)
       - SECRET_KEY=dev-secret-key-not-for-production
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080,http://localhost:8189,*
 
       # External service URLs (mock services for development)
       - PORTFOLIO_ACCOUNTING_SERVICE_URL=http://mock-services:8001
@@ -70,7 +70,7 @@ services:
     image: mongo:7-jammy
     container_name: globeco-order-generation-service-mongodb
     ports:
-      - "27017:27017"
+      - "27020:27017"
     environment:
       - MONGO_INITDB_DATABASE=globeco_dev
       # Development only - no authentication
@@ -90,7 +90,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
+    command: ["mongod", "--bind_ip_all"]
 
   # ===================================================================
   # Mock External Services (for development/testing)
@@ -102,10 +102,10 @@ services:
     image: kasbench/globeco-mock-services:dev
     container_name: globeco-mock-services
     ports:
-      - "8001:8001"  # Portfolio Accounting Service
-      - "8002:8002"  # Pricing Service
-      - "8003:8003"  # Portfolio Service
-      - "8004:8004"  # Security Service
+      - "8101:8001"  # Portfolio Accounting Service
+      - "8102:8002"  # Pricing Service
+      - "8103:8003"  # Portfolio Service
+      - "8104:8004"  # Security Service
     environment:
       - LOG_LEVEL=INFO
     networks:
@@ -124,7 +124,7 @@ services:
     image: mongo-express:1.0-20-alpine3.18
     container_name: globeco-mongo-express
     ports:
-      - "8081:8081"
+      - "8181:8081"
     environment:
       - ME_CONFIG_MONGODB_SERVER=globeco-order-generation-service-mongodb
       - ME_CONFIG_MONGODB_PORT=27017

@@ -135,6 +135,21 @@ async def security_headers_middleware(request: Request, call_next):
 
     # Add security headers
     security_headers = SecurityHeaders.get_default_headers()
+
+    # Special CSP for Swagger UI endpoints to allow external resources
+    if (
+        request.url.path in ["/docs", "/redoc"]
+        or request.url.path.startswith("/docs/")
+        or request.url.path.startswith("/redoc/")
+    ):
+        security_headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com;"
+        )
+
     for header_name, header_value in security_headers.items():
         response.headers[header_name] = header_value
 
@@ -156,7 +171,7 @@ def create_app() -> FastAPI:
         version=settings.version,
         docs_url="/docs",
         redoc_url="/redoc",
-        # openapi_url="/openapi.json",
+        openapi_url="/openapi.json",
         lifespan=lifespan,
     )
 
