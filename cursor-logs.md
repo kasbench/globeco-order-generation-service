@@ -575,3 +575,63 @@ This is a **research/benchmarking application** with different security requirem
 This configuration ensures the CI/CD pipeline can complete successfully while maintaining appropriate security scanning for a research/benchmarking application context.
 
 ---
+
+## CI/CD Pipeline Trivy Security Scan Upload Fix - GitHub Security Permissions
+
+**Date:** 2024-12-23
+**Prompt:** "I'm getting the following error in @ci.yml: Resource not accessible by integration - https://docs.github.com/rest"
+
+**Issue Identified:**
+The GitHub Actions CI pipeline was failing when trying to upload Trivy security scan results to GitHub's Security tab with:
+```
+Warning: Resource not accessible by integration - https://docs.github.com/rest
+Error: Resource not accessible by integration - https://docs.github.com/rest
+```
+
+**Root Cause Analysis:**
+- The `github/codeql-action/upload-sarif@v3` action requires special permissions to upload to GitHub's Security tab
+- This feature requires **GitHub Advanced Security** to be enabled on the repository
+- Alternative scenarios causing this error:
+  - Repository doesn't have GitHub Advanced Security subscription
+  - Running on a forked repository where security uploads are restricted
+  - GITHUB_TOKEN doesn't have `security-events` write permissions
+  - Private repository without the appropriate GitHub plan
+
+**Solution Implemented:**
+1. **Made Security Upload Optional**:
+   ```yaml
+   - name: Upload Trivy scan results to GitHub Security
+     continue-on-error: true  # Optional upload - requires GitHub Advanced Security or special permissions
+   ```
+
+2. **Added Fallback Artifact Upload**:
+   ```yaml
+   - name: Upload Trivy scan results as artifact
+     uses: actions/upload-artifact@v4
+     with:
+       name: trivy-security-scan
+       path: trivy-results.sarif
+       retention-days: 30
+   ```
+
+**Benefits:**
+- **CI Pipeline Resilience**: Pipeline continues even if GitHub Security upload fails
+- **Security Scan Preservation**: SARIF results are still available as downloadable artifacts
+- **Flexible Deployment**: Works across different repository types and GitHub plan levels
+- **Research Platform Appropriate**: Maintains security scanning without requiring enterprise features
+
+**Technical Implementation:**
+- **Dual Upload Strategy**: Attempts GitHub Security upload first, always provides artifact fallback
+- **Non-blocking Approach**: Uses `continue-on-error: true` to prevent pipeline failure
+- **Artifact Retention**: 30-day retention for security scan results
+- **Format Compatibility**: SARIF format allows integration with external security tools
+
+**Business Value:**
+- **Unblocked CI/CD**: Pipeline executes successfully regardless of GitHub Security feature availability
+- **Security Visibility**: Trivy scan results remain accessible for review and analysis
+- **Platform Flexibility**: Works across different GitHub repository configurations
+- **Benchmarking Ready**: Security scanning integrated without blocking research deployment
+
+This fix ensures the CI/CD pipeline provides comprehensive security scanning while maintaining compatibility across different GitHub repository configurations and subscription levels.
+
+---
