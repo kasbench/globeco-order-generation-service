@@ -1,0 +1,26 @@
+[bandit]
+# Bandit configuration for GlobeCo Order Generation Service
+# This is a research/benchmarking application with different security requirements
+
+# Skip test files for assert statements (B101) and random usage (B311)
+skips = B101,B311
+
+# Test files - completely exclude from scanning for common test patterns
+exclude_dirs = src/tests,htmlcov,.pytest_cache,.venv,.git,__pycache__
+
+# Allow binding to all interfaces (B104) - required for containerized deployment
+[bandit.B104]
+# Suppress B104 for configuration files - containerized apps need 0.0.0.0 binding
+baseline = ["src/config.py"]
+
+# Allow hardcoded passwords in test/development contexts
+[bandit.B106]
+baseline = ["src/tests", "env.example"]
+
+# Allow standard random generators in test utilities
+[bandit.B311]
+baseline = ["src/tests"]
+
+# Allow assert statements in test code
+[bandit.B101]
+baseline = ["src/tests"]

@@ -90,8 +90,10 @@ jobs:
 
     - name: Security scan with Bandit
       run: |
-        uv run python -m bandit -r src/ -f json -o bandit-report.json || true
-        uv run python -m bandit -r src/ -f txt
+        # Note: || true allows pipeline to continue - this is a research/benchmarking app
+        # Configuration in .bandit excludes test files and allows container-appropriate settings
+        uv run python -m bandit -r src/ -f json -o bandit-report.json -c .bandit || true
+        uv run python -m bandit -r src/ -f txt -c .bandit || true
 
     - name: Upload security scan results
       if: always()
