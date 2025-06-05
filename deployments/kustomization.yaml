@@ -6,10 +6,12 @@ metadata:
   namespace: globeco
 
 # Common labels applied to all resources
-commonLabels:
-  app: globeco-order-generation-service
-  component: order-generation
-  version: v1
+labels:
+- includeSelectors: true
+  pairs:
+    app: globeco-order-generation-service
+    component: order-generation
+    version: v1
 
 # Resources to include in the deployment
 resources:
@@ -49,11 +51,8 @@ secretGenerator:
   type: Opaque
 
 # Patches for different environments
-patchesStrategicMerge:
-- patches/production-resources.yaml
-
-# JSON patches for specific modifications
 patches:
+- path: patches/production-resources.yaml
 - target:
     kind: Deployment
     name: globeco-order-generation-service
@@ -71,7 +70,3 @@ replicas:
   count: 3
 - name: globeco-order-generation-service-mongodb
   count: 1
-
-# Resource transformers
-transformers:
-- resource-limits.yaml

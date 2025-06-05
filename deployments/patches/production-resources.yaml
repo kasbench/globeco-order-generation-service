@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: globeco-order-generation-service
+  namespace: globeco
 spec:
   replicas: 5
   template:
@@ -33,6 +34,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: globeco-order-generation-service-mongodb
+  namespace: globeco
 spec:
   replicas: 1
   template:
