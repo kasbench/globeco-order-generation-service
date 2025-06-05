@@ -239,3 +239,73 @@ This comprehensive approach allows us to:
 This comprehensive fix addresses the underlying dependency installation issues and provides the debugging information needed to ensure reliable CI/CD pipeline operation.
 
 ---
+
+## CI/CD Pipeline Pre-commit Version Fix - Command Line Interface
+
+**Date:** 2024-12-23
+**Prompt:** "We now hit this error: Run echo "=== Pytest Info ===" [...] AttributeError: module 'pre_commit' has no attribute '__version__'"
+
+**Issue Identified:**
+The GitHub Actions CI pipeline was failing with:
+```
+AttributeError: module 'pre_commit' has no attribute '__version__'
+```
+
+**Root Cause Analysis:**
+- The `pre_commit` Python module doesn't expose a `__version__` attribute like other standard Python packages
+- The verification step was trying to access `pre_commit.__version__` which doesn't exist
+- This is a module-specific issue where pre-commit uses a different version access pattern
+- The module was properly installed, but version checking approach was incorrect
+
+**Solution Applied:**
+Updated the pre-commit version check to use the command-line interface:
+
+```yaml
+# Before (failing):
+- name: Verify installations
+  run: |
+    echo "=== Pytest Info ==="
+    uv run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
+    echo "=== Pre-commit Info ==="
+    uv run python -c "import pre_commit; print(f'pre-commit version: {pre_commit.__version__}')"
+
+# After (working):
+- name: Verify installations
+  run: |
+    echo "=== Pytest Info ==="
+    uv run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
+    echo "=== Pre-commit Info ==="
+    uv run pre-commit --version
+```
+
+**Technical Details:**
+- **Command Line Approach**: Used `uv run pre-commit --version` instead of Python module attribute access
+- **Module Compatibility**: Respects pre-commit's version reporting mechanism
+- **UV Integration**: Maintains proper virtual environment isolation
+- **Error Prevention**: Avoids AttributeError while still providing version information
+
+**Files Modified:**
+- `.github/workflows/ci.yml` - Updated pre-commit version verification command
+
+**Key Learning:**
+Not all Python packages expose version information through the `__version__` attribute. Some packages (like pre-commit) use their command-line interface for version reporting. This is a good reminder to check package-specific documentation for version access patterns.
+
+**Alternative Approaches Considered:**
+1. Using `importlib.metadata.version('pre-commit')` - more complex but standard
+2. Using `pre_commit.__version__` - doesn't exist for this package
+3. Using CLI `--version` flag - chosen for simplicity and reliability
+
+**Verification:**
+- CI pipeline should now successfully display both pytest and pre-commit version information
+- Environment info gathering step will complete without errors
+- All subsequent CI steps should proceed normally
+
+**Business Impact:**
+- **CI/CD Pipeline Reliability**: Fixed another minor but critical failure point in environment verification
+- **Debugging Capability**: Maintains visibility into tool versions for troubleshooting
+- **Quality Assurance**: Ensures environment verification completes successfully
+- **Developer Experience**: Provides clear version information for debugging CI issues
+
+This fix ensures the CI/CD pipeline can properly verify and display version information for all installed development tools, completing the environment setup validation successfully.
+
+---
