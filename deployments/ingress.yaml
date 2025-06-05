@@ -1,0 +1,109 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: globeco-order-generation-service-ingress
+  namespace: globeco
+  labels:
+    app: globeco-order-generation-service
+    component: order-generation
+    version: v1
+    tier: application
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "30"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # Rate limiting for DDoS protection
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    # CORS headers
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization, X-Correlation-ID"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    # Health check annotations
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location /health/live {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+      }
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - order-generation.globeco.kasbench.org
+    secretName: globeco-order-generation-service-tls
+  rules:
+  - host: order-generation.globeco.kasbench.org
+    http:
+      paths:
+      # API endpoints
+      - path: /api/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: globeco-order-generation-service
+            port:
+              number: 8080
+      # Health check endpoints
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: globeco-order-generation-service
+            port:
+              number: 8080
+      # Documentation endpoints
+      - path: /docs
+        pathType: Prefix
+        backend:
+          service:
+            name: globeco-order-generation-service
+            port:
+              number: 8080
+      - path: /redoc
+        pathType: Prefix
+        backend:
+          service:
+            name: globeco-order-generation-service
+            port:
+              number: 8080
+      - path: /openapi.json
+        pathType: Exact
+        backend:
+          service:
+            name: globeco-order-generation-service
+            port:
+              number: 8080
+      # Metrics endpoint (protected)
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: globeco-order-generation-service
+            port:
+              number: 8080
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: globeco-order-generation-service-tls
+  namespace: globeco
+  labels:
+    app: globeco-order-generation-service
+    component: order-generation
+    version: v1
+    tier: application
+type: kubernetes.io/tls
+data:
+  # Self-signed certificate for development/testing
+  # In production, use cert-manager or proper CA-signed certificates
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURYVENDQWtXZ0F3SUJBZ0lKQU1xc3U4RXpMRGdvTUEwR0NTcUdTSWIzRFFFQkN3VUFNRUl4Q3pBSkJnTlYKQkFZVEFsVlRNUkF3RGdZRFZRUUlEQWRCY21sNmIyNWhNUkF3RGdZRFZRUUhEQWRCY21sNmIyNWhNUTh3RFFZRApWUVFLREFabmJHOWlaV052TUI0WERUSXpNVEl4TVRFek5UQXlObG9YRFRNek1USXdPREV6TlRBeU5sb3dRakVMCk1Ba0dBMVVFQmhNQ1ZWTXhFREFPQmdOVkJBZ01CMEZ5YVhwdmJtRXhFREFPQmdOVkJBY01CMEZ5YVhwdmJtRXgKRHpBTkJnTlZCQW9NQm1kc2IySmxZMjh3Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLQW9JQgpBUUMyK0swL3lHYm9HZU9lSFNUZlNxclgxdjVhT1hvUDBkOVRWQnQwbTVsa2tDN3VZa0F5UWsyNzc3OTgwLytXCkNVSzU2MzZ0cDl2WUtOZ1VGNnozN3p0K0I4dm1FYnVOUnFOZTNKSHJSSHI5Qm1acXNrTnU3SjYydTl3UXUrUGkKSzhMNHI1VmJBOWwyRDY3R0ZLNnhwUzVvVnNvV25ZNVVFTVpkZ2tzVTZCZk1BK2xCVUVaWGRqSHc0d1pTWEJzSwpXOUJEN0VqNDBIeTZYdzc4bnp4aDJhOUNHTWw5a2wxSnJWRTIrMG9sZmVpaXhPVkoxTDl1WXVJMTcrWklnbkV1ClI2Y1JkNGpmQVdkdDc1NEc1Zm9JcjY0dVFYaDRQMkVaZHFhWmFCYlY2K3JzbXg4TUFtTVREck5NNEhoSC9QZDkKeTJHaFkrVVJtUHBCRjJ0NGcxVzQ3L2lYQWdNQkFBR2pVREJPTUIwR0ExVWREZ1FXQkJSYndaOExONkhPY0lyOQp4R1VDcldRRm5BcHk3akFmQmdOVkhTTUVHREFXZ0JSYndaOExONkhPY0lyOXhHVUNyV1FGbkFweTdqQU1CZ05WCkhSTUVCVEFEQVFIL01BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQktBcStzMDFyS1lJN3VzYWJucllwWjZGaXEKaERnUGJhZUJHZGYwWkVWdGZYTGlHK0VudGt5NjhrNHkrSUlRY3JNUVY3Mk8vKzBRWEFsczJMWks3UUJINEt5MAozM1ZHU2dOK1REdmE1bm95OFVTdFNsUDVVOXZvVVZKTWpVeGNJK1ZyUlJvdmZIZTZxS1dpZGU3VlVKRnlCWXh3CnYxNXF6L2tGN0JtQnRWZE4yMy8xL2M5cTBGZXVuNVc1Y1hCSGtwZC8zU2YwdGhGdjR6eDBzMXE2TzJzZUczTEQKdVpnZmk2dm5pcU5yUGhqZXJjT2xRcE5WaVdCQWRUSDg0WUNEcHdEQTFucGJGd1N6K0JZVjc5WWR1ekFvMllGcAprM0E3b1E5Q0srL3JGZGhJNGNYMUNGZ2RiM2hlVHQweXhwSnZXNkhKdFh2dkZDbmMybEJhc2ovUE5oT3AKMklKSFNUZlNxclgxdjVhT1hvUDBkOVRWQnQwbTVsa2tDN3VZa0F5UWsyNzc3OTgwLytXQ1VLNTYzNnRwOXZZS04KZ1VGNnozN3p0K0I4dm1FYnVOUnFOZTNKSHJSSHI5Qm1acXNrTnU3SjYydTl3UXUrUGlLOEw0cjVWYkE5bDJENgo3R0ZLNnhwUzVvVnNvV25ZNVVFTVpkZ2tzVTZCZk1BK2xCVUVaWGRqSHc0d1pTWEJzS1c5QkQ3RWo0MEh5NlgKdzc4bnp4aDJhOUNHTWw5a2wxSnJWRTIrMG9sZmVpaXhPVkoxTDl1WXVJMTcrWklnbkV1UjZjUmQ0amZBV2R0NzU0RQo1Zm9JcjY0dVFYaDRQMkVaZHFhWmFCYlY2K3JzbXg4TUFtTVREck5NNEhoSC9QZDl5MkdoWSvVUm1QcEJGMnQ0CmcxVzQ3L2lYQWdNQkFBRUNnZ0VBUjA4N2FjcGk5c0FkOCtXSW1xbUNZd1oyZWhhVE9vTXZqTFdmbFlJb21yQm0KNkMxeUdhU2pZbjNPMnR0SVNHUGo5WG5FVDVkcGlYRXN2VVF1RzlHQ0o2ZkhBdDRLRlhBTnBvb0V4VDdFZWYxUQpyWGdLcGNKS3owbmZZTzJ5WStlWkh5TldXenR1VGxnUXl1T0lQZU9zbGloWFpOQVRhQ1VQZnczR2xQcW5Wb2ltCjZ5RG5wR0s5UklsWUg3WFptNXZTNmlvU2pJQ3pVSG1EM0tiWVBaRG5Mbi9KV012WDlKT1lxSTlYUzRQVWlxbHEKR1RTKzlubzNPaFdVQkJNMkRub2psUmFJaEZJUFhJb1REMEtKN2M5eFVmZGdkTjgyZFplNlhjR3R0M2ZQMnNmSAo2c25wR1l4MU01QnhKQUtVKzlyOVJ0NENlUTF6VGtrTGM1OWh5NHp0VVFLQ2dZRUF5ZStQZk96dXB0REJPdjNhCko3MEt6K1pCSjRQS0VqZXFBQnVSdnVpRUczcWNOOE9seUVaT3BTUWhzMXdGU2RucVNGSmU4QjJJdHdVSC9FSDEKeTNOeXZCVkVtKzRPb0JrVDBySVJUVkdkTWVYSDVhcDhvY0hZRDNIbjIwSWQzc2VNN0I4L2hKM0hnQnNBMW03Ugo1ckErbGYrT0VwR2VYdzNRM0FGbUI3Q3h4OTBDQjBQTURBQ2NzNW54SGZYeUtJTDBGTlBoRFFjN21oSGdaK0UwCkd0UmU1MUN4TURrUEE0aFVHbWNKcDlCKzcrQWJUTGtOVWdqR0Z6VEdRVXQ4UFRLVFUvLzM2RnU1K1pyRFVjYmkKN0s4QUxDMUx4QUV4dDUwc0U2NWtESTJIZ3Q3cHl5aHk4WnRaUWF1c3pNUlRXa3JzUk1CV2ZYbU03a1RKWXFjagp1bTl0TnJnOGF3VUNnWUVBNm5xM0dTVS9vWnlwZHlyeVJ5aUVLRnpob0pzZGdJVG9oeStJUlNuWEtnbTN2VzJyCmJMT3R5Y2ZVakd4eXVLZ0lNOTRJOWlrQSt3M0g2UmxLSEEwN3YrZ1drZ21LYWNMWEg3TXZscXYvMnhkOGNvK1kKQ25XOFJuWVZaVnJ5SU5OU0JqTVo5UUFmbUZqOGFyZThqRHNmbDdoMjVMQjllbU5HVm1Hc21VRlhJRFUvb1h6TApTa0h4N1lqRHVNL0JETDE2K2llNGVFdjB0bDQ2R0NZZlBzRm5VKzd3a3I1dUQ5N3lkTUtNOVNDY2hpODV1aDNyCkJGSkpCMGdKTmZnZWxvYmE3dzNSUFJDUm9lQm9QcTFydVE4TGZXZ2JSQi9XTGMwQ1NQeXpobGZxMWFGMVJPMzUKSHM4WmdldStuUml1UFdJWnRGaExjd0x1V1huSXVHV0lEL1FkZ0RmSmNzRUNnWUVBd3dNam1KTXZQQUJkOHNlNgpRTzQ2VUU4V09YTU5GTmtHSHdrL3pkN0ZhbXJuZlBBaUNDWDJhczk4VnZOdUJwUjVEU0x3RUtTUDZzUGNOTGFECi8zVWJHY3FjQ1BuUmExaVFsMGJGRld5YkM2M25OQjFYMXFTa3V2bUI0RUVERndyL2RXZmRUaXNzdXJaekhSNW0KcUpXNFNZSElrZC81bERkWndDbGJ4MDVPU09LTEF4ZjMxRlY3WUtpUXFOYkR5bk5NZXNOa2ZqOHVpY001cW5QdwpYOGZoUXhJZEhXV3pwKzJ5MjlpeGdZeWVsSnpwMFFTK0tJb3I5Nk1rVFJNdHJUUnJ0M1UvQU9SV3dYdTQ5RzJWCmJRZUR3VjlvdHk3STFvM2hoU0JscVp4dWpNOCtzMUtBL2ttb0ZGelBTdDl1M1UwR3djaHVBVEEvN2Y3ZFFSMGMKa3VteDNlNm5YSitVQzlQZTd3SGJtUERFbHdKa2dNaS9FWjhGSThUMFBnSFJxMXU2NGdpb1p0Q3ZwUDBYZWpoUApDUU9CQWYzQ0ZDVGh4VWp1cXMreUhXaHdJVjJ1Vk1YQ2hIWGcxVllmOVNiVlM2OTBaT0VaOCtJNGczNzNhWGtrCmZKYTdOeEJacTlTcnpxR1NIY0FqZWVHdU5IOGl2dERBdDVYNEh0aTNVVDRid0ltK24rUlVkSEE4SUNyOFF6UWkKYUJsRUxrSFBxQWU5Y3ZmKzY3d2xhRWZ0bHFiNUl1Qm5KRzI5M0gvT3lITERxM204b1RnOUFBNXFxNlZhbElCNQpqVk9YZDNGRlpHcUZqYlRmaEQ0V1dhdE9tZTJsbFFsSG44L1NtTWExaVU0OTJXcDFiYy9rSXNRN3VGRnNONE5hCkZCZUFpcUFBWEVneUs5UnZ2YjFJSGg3YVhzTjNyZnZvVW9WM1JPeGZLSHNzWU5RQ2dmUUdnOEJQWGpJQ0xCSnYKTkI1eCttTFVYMFpwU1VwQWVNSTBxcVdqNEo4Y0VFd2xkYUs0Ky9Rb1JTKzFoN1hrcmlTVCs4QklCUVhoNDBHRwplRGZPRVNzMFFLQWVDZ1lBcnFMNVJaNC9NOGwzQnUzSkZWYVdGNXkzZi9KWmY1MFBQS2VSV2pZNlEzVnBGWklNCmdacXQ5VTZOOCtOZzBwN3BsWmpOQ1NRZ3FUQTE4Y1hTOGNaZmtMYXFUcTJiSVdXenh6UkpBUFJJWkQzdmF1bFMKdjkrelQ1YkJTVTJzZDYzazNLdjg1M1pyS0JQdTB0NGJVUUVpMlBDc09pdGxlNUNWYUJzVGR1N3I1Wk9aaHg5dQptVHNGUXorSFFLQmdRQ2I2V2NDWGwzbmlsZDZ1RjhoWXhZZGhaMVBvWkNJZkFlcUtzM1Zwa3Q3WG5nRC9iCkdJWDlNbW8wRlA4WElwRjhKRGZxMEZwQTE5a2VzcVNGNGk3Z0ZuSURYTVlYeFcwZGZxc0ZhNWpBWGZ1aXJlaVQKbUhpWFkzWVovQjJHTGZwUmNwNXpXZ08rcjFjZzNSMWtrZ0pyYXhqMUEzZGJJWVVrdFJRYXBXNkNDZz09Ci0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRQzIrSzAveUdib0dlT2UKSFNUZlNxclgxdjVhT1hvUDBkOVRWQnQwbTVsa2tDN3VZa0F5UWsyNzc3OTgwLytXQ1VLNTYzNnRwOXZZS05nVQpGNnozN3p0K0I4dm1FYnVOUnFOZTNKSHJSSHI5Qm1acXNrTnU3SjYydTl3UXUrUGlLOEw0cjVWYkE5bDJENjdHCkZLNnhwUzVvVnNvV25ZNVVFTVpkZ2tzVTZCZk1BK2xCVUVaWGRqSHc0d1pTWEJzS1c5QkQ3RWo0MEh5Nlh3NzgKbnp4aDJhOUNHTWw5a2wxSnJWRTIrMG9sZmVpaXhPVkoxTDl1WXVJMTcrWklnbkV1UjZjUmQ0amZBV2R0NzU0RQo1Zm9JcjY0dVFYaDRQMkVaZHFhWmFCYlY2K3JzbXg4TUFtTVREck5NNEhoSC9QZDl5MkdoWSvVUm1QcEJGMnQ0CmcxVzQ3L2lYQWdNQkFBR2pVREJPTUIwR0ExVWREZ1FXQkJSYndaOExONkhPY0lyOXhHVUNyV1FGbkFweTcKakFmQmdOVkhTTUVHREFXZ0JSYndaOExONkhPY0lyOXhHVUNyV1FGbkFweTdqQU1CZ05WSFJNRUJUQURBUUgvCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0=

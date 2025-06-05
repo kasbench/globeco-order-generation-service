@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: globeco-order-generation-service
+spec:
+  replicas: 5
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      containers:
+      - name: order-generation-service
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        env:
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: OPTIMIZATION_TIMEOUT
+          value: "30"
+        - name: THREAD_POOL_MAX_WORKERS
+          value: "20"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: globeco-order-generation-service-mongodb
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: mongodb
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi
+      storageClassName: fast-ssd

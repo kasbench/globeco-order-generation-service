@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: globeco-order-generation-service-config
+  namespace: globeco
+  labels:
+    app: globeco-order-generation-service
+    component: order-generation
+    version: v1
+    tier: application
+data:
+  # Application Configuration
+  SERVICE_NAME: "GlobeCo Order Generation Service"
+  VERSION: "0.1.0"
+  HOST: "0.0.0.0"
+  PORT: "8080"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+
+  # Database Configuration
+  database-name: "globeco_production"
+
+  # Mathematical Optimization Configuration
+  optimization-timeout: "30"
+  max-positions: "100"
+  target-precision: "0.005"
+  max-target-sum: "0.95"
+
+  # External Service URLs (based on requirements.md)
+  portfolio-accounting-service-url: "http://globeco-portfolio-accounting-service:8087"
+  pricing-service-url: "http://globeco-pricing-service:8083"
+  portfolio-service-url: "http://globeco-portfolio-service:8000"
+  security-service-url: "http://globeco-security-service:8000"
+  order-service-url: "http://globeco-order-service:8081"
+
+  # Circuit Breaker Configuration
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: "5"
+  CIRCUIT_BREAKER_RECOVERY_TIMEOUT: "60"
+  CIRCUIT_BREAKER_EXPECTED_EXCEPTION_TIMEOUT: "30"
+
+  # Retry Configuration
+  RETRY_MAX_ATTEMPTS: "3"
+  RETRY_INITIAL_DELAY: "1"
+  RETRY_MAX_DELAY: "4"
+  RETRY_BACKOFF_FACTOR: "2"
+
+  # External Service Timeouts (in seconds)
+  PORTFOLIO_ACCOUNTING_TIMEOUT: "10"
+  PRICING_SERVICE_TIMEOUT: "10"
+  PORTFOLIO_SERVICE_TIMEOUT: "10"
+  SECURITY_SERVICE_TIMEOUT: "10"
+  ORDER_SERVICE_TIMEOUT: "10"
+
+  # CORS Configuration
+  CORS_ORIGINS: "*"
+  CORS_ALLOW_CREDENTIALS: "true"
+  CORS_ALLOW_METHODS: "*"
+  CORS_ALLOW_HEADERS: "*"
+
+  # Performance Configuration
+  THREAD_POOL_MAX_WORKERS: "10"
+  CONNECTION_POOL_SIZE: "20"
+  CONNECTION_POOL_MAX_OVERFLOW: "10"
+
+  # Health Check Configuration
+  HEALTH_CHECK_TIMEOUT: "5"
+
+  # Monitoring Configuration
+  PROMETHEUS_ENABLED: "true"
+  METRICS_NAMESPACE: "globeco"
+  METRICS_SUBSYSTEM: "order_generation_service"
+
+  # Business Rules Configuration
+  MIN_CASH_PERCENTAGE: "0.05"
+  MAX_PORTFOLIO_POSITIONS: "100"
+  POSITION_TARGET_PRECISION: "0.005"
+  DRIFT_TOLERANCE_MIN: "0.0"
+  DRIFT_TOLERANCE_MAX: "1.0"

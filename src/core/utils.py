@@ -5,13 +5,13 @@ This module provides common utility functions including structured logging,
 correlation ID management, and other cross-cutting concerns.
 """
 
+import json
+import logging
+import uuid
 from contextvars import ContextVar
 from datetime import datetime
 from decimal import Decimal
-import json
-import logging
 from typing import Any
-import uuid
 
 import structlog
 

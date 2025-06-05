@@ -1,0 +1,77 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: globeco-order-generation-service
+  namespace: globeco
+
+# Common labels applied to all resources
+commonLabels:
+  app: globeco-order-generation-service
+  component: order-generation
+  version: v1
+
+# Resources to include in the deployment
+resources:
+- deployment.yaml
+- service.yaml
+- configmap.yaml
+- secrets.yaml
+- mongodb.yaml
+- hpa.yaml
+- ingress.yaml
+
+# Namespace to deploy all resources
+namespace: globeco
+
+# Images to manage versioning
+images:
+- name: kasbench/globeco-order-generation-service
+  newTag: latest
+- name: mongo
+  newTag: "8.0"
+
+# ConfigMap generator for environment-specific configurations
+configMapGenerator:
+- name: globeco-order-generation-service-environment
+  literals:
+  - ENVIRONMENT=production
+  - CLUSTER_NAME=kasbench-globeco
+  - DEPLOYMENT_VERSION=v1.0.0
+  - KUBERNETES_NAMESPACE=globeco
+
+# Secret generator for environment-specific secrets
+secretGenerator:
+- name: globeco-order-generation-service-runtime-secrets
+  literals:
+  - DEPLOYMENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  - BUILD_HASH=placeholder-build-hash
+  type: Opaque
+
+# Patches for different environments
+patchesStrategicMerge:
+- patches/production-resources.yaml
+
+# JSON patches for specific modifications
+patches:
+- target:
+    kind: Deployment
+    name: globeco-order-generation-service
+  patch: |-
+    - op: add
+      path: /spec/template/metadata/annotations/deployment.kubernetes.io~1revision
+      value: "1"
+    - op: add
+      path: /spec/template/metadata/annotations/config.kubernetes.io~1local-config-sha
+      value: placeholder-config-sha
+
+# Replica configuration
+replicas:
+- name: globeco-order-generation-service
+  count: 3
+- name: globeco-order-generation-service-mongodb
+  count: 1
+
+# Resource transformers
+transformers:
+- resource-limits.yaml
