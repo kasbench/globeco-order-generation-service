@@ -69,13 +69,22 @@ jobs:
         echo "=== Pre-commit Info ==="
         uv run pre-commit --version
 
+    - name: Debug pre-commit environment
+      run: |
+        echo "=== Current Directory ==="
+        pwd
+        echo "=== Pre-commit Config File ==="
+        ls -la .pre-commit-config.yaml || echo "Pre-commit config file not found"
+        echo "=== Git Status ==="
+        git status --porcelain .pre-commit-config.yaml || echo "File not tracked"
+
     - name: Install pre-commit hooks
       run: |
-        uv run python -m pre_commit install
+        uv run pre-commit install
 
     - name: Run pre-commit hooks
       run: |
-        uv run python -m pre_commit run --all-files
+        uv run pre-commit run --all-files
 
     - name: Security scan with Bandit
       run: |
