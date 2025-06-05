@@ -18,6 +18,7 @@ from src.api.routers.health import router as health_router
 from src.api.routers.models import router as models_router
 from src.api.routers.rebalance import router as rebalance_router
 from src.config import get_settings
+from src.core.monitoring import MetricsMiddleware, setup_monitoring
 from src.core.security import SecurityHeaders
 from src.core.utils import (
     configure_structured_logging,
@@ -185,8 +186,12 @@ def create_app() -> FastAPI:
     )
 
     # Add custom middleware
+    app.add_middleware(MetricsMiddleware)
     app.middleware("http")(correlation_middleware)
     app.middleware("http")(security_headers_middleware)
+
+    # Setup monitoring and observability
+    setup_monitoring(app)
 
     # Add routers
     app.include_router(health_router, prefix="/health", tags=["health"])

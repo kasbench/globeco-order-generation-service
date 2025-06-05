@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.config import Settings, get_settings
+from src.core.monitoring import get_health_metrics
 from src.core.utils import create_response_metadata, get_correlation_id, get_logger
 
 logger = get_logger(__name__)
@@ -266,6 +267,20 @@ class HealthCheck:
 
         # Calculate uptime
         uptime = (datetime.utcnow() - self.start_time).total_seconds()
+
+        # Get performance metrics
+        try:
+            performance_metrics = get_health_metrics()
+            checks["performance"] = {
+                "status": "healthy",
+                "metrics": performance_metrics,
+            }
+        except Exception as e:
+            logger.warning("Failed to get performance metrics", error=str(e))
+            checks["performance"] = {
+                "status": "degraded",
+                "message": f"Metrics unavailable: {str(e)}",
+            }
 
         return HealthStatus(
             status=overall_status,
