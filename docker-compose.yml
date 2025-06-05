@@ -1,0 +1,241 @@
+# Docker Compose for GlobeCo Order Generation Service Local Development
+# Provides complete development environment with MongoDB and supporting services
+
+version: '3.8'
+
+services:
+  # ===================================================================
+  # Application Service - Main FastAPI Application
+  # ===================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: kasbench/globeco-order-generation-service:dev
+    container_name: globeco-app-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # Application configuration
+      - LOG_LEVEL=DEBUG
+      - DEBUG=true
+
+      # Database configuration
+      - MONGODB_URL=mongodb://mongodb:27017/globeco_dev
+      - DATABASE_NAME=globeco_dev
+
+      # Service configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      - MAX_OPTIMIZATION_TIME=30
+      - EXTERNAL_SERVICE_TIMEOUT=10
+
+      # Security (development only)
+      - SECRET_KEY=dev-secret-key-not-for-production
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+
+      # External service URLs (mock services for development)
+      - PORTFOLIO_ACCOUNTING_SERVICE_URL=http://mock-services:8001
+      - PRICING_SERVICE_URL=http://mock-services:8002
+      - PORTFOLIO_SERVICE_URL=http://mock-services:8003
+      - SECURITY_SERVICE_URL=http://mock-services:8004
+    volumes:
+      # Hot reload for development
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      # Logs volume for debugging
+      - app-logs:/app/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mock-services:
+        condition: service_started
+    networks:
+      - globeco-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===================================================================
+  # MongoDB Database Service
+  # ===================================================================
+  mongodb:
+    image: mongo:7-jammy
+    container_name: globeco-mongodb-dev
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=globeco_dev
+      # Development only - no authentication
+      - MONGO_INITDB_ROOT_USERNAME=
+      - MONGO_INITDB_ROOT_PASSWORD=
+    volumes:
+      # Persistent data storage
+      - mongodb-data:/data/db
+      # MongoDB configuration
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - globeco-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
+
+  # ===================================================================
+  # Mock External Services (for development/testing)
+  # ===================================================================
+  mock-services:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-services
+    image: kasbench/globeco-mock-services:dev
+    container_name: globeco-mock-services
+    ports:
+      - "8001:8001"  # Portfolio Accounting Service
+      - "8002:8002"  # Pricing Service
+      - "8003:8003"  # Portfolio Service
+      - "8004:8004"  # Security Service
+    environment:
+      - LOG_LEVEL=INFO
+    networks:
+      - globeco-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ===================================================================
+  # MongoDB Express (Database Administration UI)
+  # ===================================================================
+  mongo-express:
+    image: mongo-express:1.0-20-alpine3.18
+    container_name: globeco-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin123
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - globeco-network
+    restart: unless-stopped
+
+  # ===================================================================
+  # Redis (for caching and session storage - optional)
+  # ===================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: globeco-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - globeco-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: ["redis-server", "--appendonly", "yes"]
+
+  # ===================================================================
+  # Jaeger (Distributed Tracing - optional)
+  # ===================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: globeco-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - globeco-network
+    restart: unless-stopped
+
+# ===================================================================
+# Networks
+# ===================================================================
+networks:
+  globeco-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ===================================================================
+# Volumes
+# ===================================================================
+volumes:
+  # Database storage
+  mongodb-data:
+    driver: local
+  redis-data:
+    driver: local
+
+  # Application logs
+  app-logs:
+    driver: local
+
+# ===================================================================
+# Additional Services for Production-like Testing
+# ===================================================================
+x-production-services:
+  # Production-like application service
+  app-production: &app-production
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: kasbench/globeco-order-generation-service:latest
+    environment:
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - MONGODB_URL=mongodb://mongodb:27017/globeco_prod
+      - DATABASE_NAME=globeco_prod
+    volumes:
+      - app-logs:/app/logs
+    networks:
+      - globeco-network
+    restart: unless-stopped
+
+  # Load balancer (nginx) for production testing
+  nginx:
+    image: nginx:alpine
+    container_name: globeco-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - globeco-network
+    restart: unless-stopped
