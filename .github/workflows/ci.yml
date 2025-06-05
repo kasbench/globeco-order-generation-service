@@ -41,6 +41,34 @@ jobs:
       run: |
         uv sync --dev
 
+    - name: Debug UV and Python environment
+      run: |
+        echo "=== UV Info ==="
+        uv --version
+        echo "=== Python Info ==="
+        uv run python --version
+        echo "=== Python Path ==="
+        uv run python -c "import sys; print(sys.executable)"
+        echo "=== Installed Packages ==="
+        uv pip list || echo "uv pip list failed"
+
+    - name: Install testing dependencies explicitly
+      run: |
+        uv pip install pytest pytest-asyncio pytest-cov pytest-mock pytest-xdist pytest-benchmark
+        uv pip install testcontainers[mongodb]
+        uv pip install pymongo motor beanie
+
+    - name: Install code quality dependencies explicitly
+      run: |
+        uv pip install pre-commit black mypy bandit
+
+    - name: Verify installations
+      run: |
+        echo "=== Pytest Info ==="
+        uv run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
+        echo "=== Pre-commit Info ==="
+        uv run python -c "import pre_commit; print(f'pre-commit version: {pre_commit.__version__}')"
+
     - name: Install pre-commit hooks
       run: |
         uv run python -m pre_commit install
@@ -51,8 +79,8 @@ jobs:
 
     - name: Security scan with Bandit
       run: |
-        uv run bandit -r src/ -f json -o bandit-report.json || true
-        uv run bandit -r src/ -f txt
+        uv run python -m bandit -r src/ -f json -o bandit-report.json || true
+        uv run python -m bandit -r src/ -f txt
 
     - name: Upload security scan results
       if: always()
@@ -104,6 +132,12 @@ jobs:
     - name: Install dependencies
       run: |
         uv sync --dev
+
+    - name: Install testing dependencies explicitly
+      run: |
+        uv pip install pytest pytest-asyncio pytest-cov pytest-mock pytest-xdist pytest-benchmark
+        uv pip install testcontainers[mongodb]
+        uv pip install pymongo motor beanie
 
     - name: Verify pytest installation
       run: |

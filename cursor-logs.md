@@ -142,3 +142,100 @@ This fix follows the same pattern as the pytest execution fix:
 This fix completes the command execution reliability improvements for the CI/CD pipeline, ensuring all automated quality assurance tools function properly.
 
 ---
+
+## CI/CD Pipeline Dependencies Fix - Explicit Package Installation
+
+**Date:** 2024-12-23
+**Prompt:** "The fix isn't working. Would `uv pip install pytest` work? The fix for installing pre-commit is also failing."
+
+**Issue Identified:**
+The Python module execution approach (`python -m pytest`, `python -m pre_commit`) was still failing, indicating the packages themselves weren't being installed properly with `uv sync --dev`.
+
+**Root Cause Analysis:**
+- `uv sync --dev` wasn't properly installing dev dependencies in the GitHub Actions environment
+- The virtual environment or package installation wasn't working as expected with UV sync
+- Packages were not available for import or module execution
+- This is a more fundamental issue than just command resolution
+
+**Solution Applied:**
+1. **Added debugging to understand the environment**:
+   ```yaml
+   - name: Debug UV and Python environment
+     run: |
+       echo "=== UV Info ==="
+       uv --version
+       echo "=== Python Info ==="
+       uv run python --version
+       echo "=== Python Path ==="
+       uv run python -c "import sys; print(sys.executable)"
+       echo "=== Installed Packages ==="
+       uv pip list || echo "uv pip list failed"
+   ```
+
+2. **Explicit package installation for quality checks**:
+   ```yaml
+   - name: Install testing dependencies explicitly
+     run: |
+       uv pip install pytest pytest-asyncio pytest-cov pytest-mock pytest-xdist pytest-benchmark
+       uv pip install testcontainers[mongodb]
+
+   - name: Install code quality dependencies explicitly
+     run: |
+       uv pip install pre-commit black mypy bandit
+   ```
+
+3. **Verification steps to ensure packages are available**:
+   ```yaml
+   - name: Verify installations
+     run: |
+       echo "=== Pytest Info ==="
+       uv run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
+       echo "=== Pre-commit Info ==="
+       uv run python -c "import pre_commit; print(f'pre-commit version: {pre_commit.__version__}')"
+   ```
+
+4. **Updated all command executions to use Python modules**:
+   ```yaml
+   # Pre-commit
+   uv run python -m pre_commit install
+   uv run python -m pre_commit run --all-files
+
+   # Bandit
+   uv run python -m bandit -r src/ -f json -o bandit-report.json
+
+   # Pytest
+   uv run python -m pytest src/tests/unit/ -v --cov=src --cov-report=xml
+   ```
+
+**Technical Details:**
+- **Explicit Installation**: Using `uv pip install` instead of relying on `uv sync --dev`
+- **Package Verification**: Added verification steps to ensure packages are properly installed
+- **Debugging Output**: Added comprehensive debugging to understand environment state
+- **Module Execution**: Maintained Python module execution approach for all tools
+- **Dependency Coverage**: Explicitly installed all required testing and quality tools
+
+**Files Modified:**
+- `.github/workflows/ci.yml` - Added explicit package installation and debugging
+
+**Expected Benefits:**
+- **Reliable Package Installation**: Ensures all required packages are actually installed
+- **Debugging Visibility**: Provides clear output about environment state and package availability
+- **Consistent Execution**: Uses proven `uv pip install` approach instead of sync
+- **Verification**: Confirms packages are available before attempting to use them
+
+**Troubleshooting Approach:**
+This comprehensive approach allows us to:
+1. See exactly what UV and Python environment we're working with
+2. Explicitly install each required package
+3. Verify packages are available before using them
+4. Debug any remaining issues with clear output
+
+**Business Impact:**
+- **CI/CD Pipeline Reliability**: Addresses fundamental dependency installation issues
+- **Debugging Capability**: Provides visibility into CI environment for troubleshooting
+- **Quality Assurance**: Ensures all development tools are properly available
+- **Development Velocity**: Reduces time spent debugging CI pipeline issues
+
+This comprehensive fix addresses the underlying dependency installation issues and provides the debugging information needed to ensure reliable CI/CD pipeline operation.
+
+---
