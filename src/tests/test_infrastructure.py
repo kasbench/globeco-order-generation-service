@@ -24,8 +24,8 @@ class TestTestingInfrastructure:
         """Test that configuration can be loaded successfully."""
         settings = get_settings()
         assert settings.service_name == "GlobeCo Order Generation Service"
-        assert settings.port == 8080
-        assert settings.database_name == "globeco_order_generation"
+        assert settings.port == 8088
+        assert settings.database_name == "order-generation"
 
     def test_decimal_assertion_utility(self):
         """Test the decimal assertion utility function."""

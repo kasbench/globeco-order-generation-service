@@ -37,16 +37,6 @@ from src.infrastructure.optimization.cvxpy_solver import CVXPYOptimizationEngine
 
 
 @lru_cache()
-def get_portfolio_accounting_client() -> PortfolioAccountingClient:
-    """Get Portfolio Accounting Service client."""
-    settings = get_settings()
-    return PortfolioAccountingClient(
-        base_url=settings.portfolio_accounting_service_url,
-        timeout=settings.external_service_timeout,
-    )
-
-
-@lru_cache()
 def get_pricing_client() -> PricingServiceClient:
     """Get Pricing Service client."""
     settings = get_settings()
@@ -73,6 +63,21 @@ def get_security_client() -> SecurityServiceClient:
         base_url=settings.security_service_url,
         timeout=settings.external_service_timeout,
     )
+
+
+def get_portfolio_accounting_client(
+    security_client: SecurityServiceClient = Depends(get_security_client),
+    pricing_client: PricingServiceClient = Depends(get_pricing_client),
+) -> PortfolioAccountingClient:
+    """Get Portfolio Accounting Service client."""
+    settings = get_settings()
+    client = PortfolioAccountingClient(
+        base_url=settings.portfolio_accounting_service_url,
+        timeout=settings.external_service_timeout,
+    )
+    # Set external service clients for market value calculations
+    client._set_external_clients(security_client, pricing_client)
+    return client
 
 
 # Domain Services

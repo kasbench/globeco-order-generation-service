@@ -69,6 +69,7 @@ dependencies = [
     "passlib[bcrypt]>=1.7.4",
     "prometheus-fastapi-instrumentator>=7.1.0",
     "psutil>=6.0.0",
+    "cachetools>=5.0.0",
 ]
 
 [project.optional-dependencies]

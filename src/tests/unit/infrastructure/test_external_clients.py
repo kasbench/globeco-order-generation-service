@@ -253,57 +253,78 @@ class TestPortfolioAccountingClient:
         return AsyncMock(spec=BaseServiceClient)
 
     @pytest_asyncio.fixture
-    async def portfolio_accounting_client(self, mock_base_client):
+    async def mock_security_client(self):
+        """Create a mock security client for testing."""
+        mock = AsyncMock()
+        mock.get_security.return_value = {"ticker": "AAPL"}
+        return mock
+
+    @pytest_asyncio.fixture
+    async def mock_pricing_client(self):
+        """Create a mock pricing client for testing."""
+        mock = AsyncMock()
+        mock._base_client = AsyncMock()
+        mock._base_client._make_request.return_value = {"close": 150.0}
+        return mock
+
+    @pytest_asyncio.fixture
+    async def portfolio_accounting_client(
+        self, mock_base_client, mock_security_client, mock_pricing_client
+    ):
         """Create a portfolio accounting client for testing."""
         client = PortfolioAccountingClient(
-            base_url="http://portfolio-accounting:8087", timeout=10.0
+            base_url="http://portfolio-accounting:8087",
+            timeout=10.0,
+            security_client=mock_security_client,
+            pricing_client=mock_pricing_client,
         )
         client._base_client = mock_base_client
         return client
 
     @pytest.mark.asyncio
-    async def test_get_portfolio_balances_success(
+    async def test_get_portfolio_summary_success(
         self, portfolio_accounting_client, mock_base_client
     ):
-        """Test successful portfolio balance retrieval."""
+        """Test successful portfolio summary retrieval."""
         # Arrange
         portfolio_id = "683b6d88a29ee10e8b499643"
         mock_response = {
-            "balances": [
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "3356336",
+            "securityCount": 1,
+            "lastUpdated": "2025-06-06T12:17:03.072131386Z",
+            "securities": [
                 {
-                    "securityId": "STOCK1234567890123456789",
-                    "quantity": 100,
-                    "marketValue": "10000.00",
-                },
-                {
-                    "securityId": "BOND1111111111111111111A",
-                    "quantity": 50,
-                    "marketValue": "7500.00",
-                },
-                {"cash": True, "quantity": 1, "marketValue": "2500.00"},
-            ]
+                    "securityId": "683b69d420f302c879a5fef0",
+                    "quantityLong": "100",
+                    "quantityShort": "0",
+                    "netQuantity": "100",
+                    "lastUpdated": "2025-06-06T12:16:50.080869Z",
+                }
+            ],
         }
         mock_base_client._make_request.return_value = mock_response
 
         # Act
-        result = await portfolio_accounting_client.get_portfolio_balances(portfolio_id)
+        result = await portfolio_accounting_client.get_portfolio_summary(portfolio_id)
 
         # Assert
-        assert len(result) == 3
-        assert result[0]["securityId"] == "STOCK1234567890123456789"
-        assert result[0]["quantity"] == 100
-        assert result[0]["marketValue"] == Decimal("10000.00")
-        assert result[2]["cash"] is True
+        assert result["portfolioId"] == "683b6d88a29ee10e8b499643"
+        assert result["cashBalance"] == "3356336"
+        assert result["securityCount"] == 1
+        assert len(result["securities"]) == 1
+        assert result["securities"][0]["securityId"] == "683b69d420f302c879a5fef0"
+        assert result["securities"][0]["netQuantity"] == "100"
 
         mock_base_client._make_request.assert_called_once_with(
-            "GET", f"/api/v1/portfolio/{portfolio_id}/balances"
+            "GET", f"/api/v1/portfolios/{portfolio_id}/summary"
         )
 
     @pytest.mark.asyncio
-    async def test_get_portfolio_balances_not_found(
+    async def test_get_portfolio_summary_not_found(
         self, portfolio_accounting_client, mock_base_client
     ):
-        """Test portfolio balance retrieval for non-existent portfolio."""
+        """Test portfolio summary retrieval for non-existent portfolio."""
         # Arrange
         portfolio_id = "non-existent-portfolio"
         mock_base_client._make_request.side_effect = ExternalServiceError(
@@ -312,30 +333,320 @@ class TestPortfolioAccountingClient:
 
         # Act & Assert
         with pytest.raises(ExternalServiceError, match="Portfolio not found"):
-            await portfolio_accounting_client.get_portfolio_balances(portfolio_id)
+            await portfolio_accounting_client.get_portfolio_summary(portfolio_id)
 
     @pytest.mark.asyncio
     async def test_get_portfolio_market_value_success(
-        self, portfolio_accounting_client, mock_base_client
+        self,
+        portfolio_accounting_client,
+        mock_base_client,
+        mock_security_client,
+        mock_pricing_client,
     ):
-        """Test successful portfolio market value calculation."""
+        """Test successful portfolio market value calculation using new method."""
         # Arrange
         portfolio_id = "683b6d88a29ee10e8b499643"
-        mock_response = {
-            "balances": [
-                {"securityId": "SEC1", "quantity": 100, "marketValue": "10000.00"},
-                {"cash": True, "quantity": 1, "marketValue": "5000.00"},
-            ]
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "5000",
+            "securityCount": 1,
+            "securities": [
+                {"securityId": "683b69d420f302c879a5fef0", "netQuantity": "100"}
+            ],
         }
-        mock_base_client._make_request.return_value = mock_response
+        mock_base_client._make_request.return_value = mock_summary
 
         # Act
         result = await portfolio_accounting_client.get_portfolio_market_value(
             portfolio_id
         )
 
+        # Assert - Cash (5000) + Securities (100 * 150.0) = 20000.000
+        assert result == Decimal("20000.000")
+
+        # Verify external service calls
+        mock_security_client.get_security.assert_called_once_with(
+            "683b69d420f302c879a5fef0"
+        )
+        mock_pricing_client._base_client._make_request.assert_called_once_with(
+            "GET", "/api/v1/price/AAPL"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_market_value_cash_only(
+        self, portfolio_accounting_client, mock_base_client
+    ):
+        """Test market value calculation for cash-only portfolio."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "15000",
+            "securityCount": 0,
+            "securities": [],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Act
+        result = await portfolio_accounting_client.get_portfolio_market_value(
+            portfolio_id
+        )
+
+        # Assert - Only cash balance
+        assert result == Decimal("15000.000")
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_market_value_empty_portfolio(
+        self, portfolio_accounting_client, mock_base_client
+    ):
+        """Test market value calculation for empty portfolio."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_base_client._make_request.return_value = None  # No balance record
+
+        # Act
+        result = await portfolio_accounting_client.get_portfolio_market_value(
+            portfolio_id
+        )
+
+        # Assert - Zero for empty portfolio
+        assert result == Decimal("0.000")
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_market_value_negative_cash(
+        self, portfolio_accounting_client, mock_base_client
+    ):
+        """Test market value calculation with negative cash (overdrawn account)."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "-1000",  # Overdrawn account
+            "securityCount": 1,
+            "securities": [
+                {"securityId": "683b69d420f302c879a5fef0", "netQuantity": "50"}
+            ],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Act
+        result = await portfolio_accounting_client.get_portfolio_market_value(
+            portfolio_id
+        )
+
+        # Assert - Negative cash (-1000) + Securities (50 * 150.0) = 6500.000
+        assert result == Decimal("6500.000")
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_market_value_short_position(
+        self, portfolio_accounting_client, mock_base_client
+    ):
+        """Test market value calculation with short position (negative quantity)."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "10000",
+            "securityCount": 1,
+            "securities": [
+                {
+                    "securityId": "683b69d420f302c879a5fef0",
+                    "netQuantity": "-20",  # Short position
+                }
+            ],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Act
+        result = await portfolio_accounting_client.get_portfolio_market_value(
+            portfolio_id
+        )
+
+        # Assert - Cash (10000) + Securities (-20 * 150.0) = 7000.000
+        assert result == Decimal("7000.000")
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_market_value_security_not_found(
+        self, portfolio_accounting_client, mock_base_client, mock_security_client
+    ):
+        """Test market value calculation when security is not found."""
+        # Arrange
+        # Clear cache to ensure fresh calls
+        portfolio_accounting_client._securities_cache.clear()
+        portfolio_accounting_client._prices_cache.clear()
+
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "5000",
+            "securityCount": 1,
+            "securities": [
+                {"securityId": "683b69d420f302c879a5fef0", "netQuantity": "100"}
+            ],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Reset the mock to clear any previous configuration
+        mock_security_client.reset_mock()
+        mock_security_client.get_security.side_effect = ExternalServiceError(
+            "Security not found", service="security", status_code=404
+        )
+
+        # Act & Assert - Should raise ExternalServiceError per requirement
+        with pytest.raises(ExternalServiceError, match="Security not found"):
+            await portfolio_accounting_client.get_portfolio_market_value(portfolio_id)
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_market_value_price_not_available(
+        self, portfolio_accounting_client, mock_base_client, mock_pricing_client
+    ):
+        """Test market value calculation when price is not available."""
+        # Arrange
+        # Clear cache to ensure fresh calls
+        portfolio_accounting_client._securities_cache.clear()
+        portfolio_accounting_client._prices_cache.clear()
+
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "5000",
+            "securityCount": 1,
+            "securities": [
+                {"securityId": "683b69d420f302c879a5fef0", "netQuantity": "100"}
+            ],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Reset pricing client mock to clear any previous configuration
+        mock_pricing_client.reset_mock()
+        mock_pricing_client._base_client.reset_mock()
+        mock_pricing_client._base_client._make_request.return_value = {"close": None}
+
+        # Act & Assert - Should raise ExternalServiceError per requirement
+        with pytest.raises(ExternalServiceError, match="No price available"):
+            await portfolio_accounting_client.get_portfolio_market_value(portfolio_id)
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_positions_success(
+        self, portfolio_accounting_client, mock_base_client
+    ):
+        """Test successful portfolio positions retrieval."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "5000",
+            "securityCount": 2,
+            "securities": [
+                {"securityId": "SEC1", "netQuantity": "100"},
+                {"securityId": "SEC2", "netQuantity": "-50"},  # Short position
+                {"securityId": "SEC3", "netQuantity": "0"},  # Zero position
+            ],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Act
+        result = await portfolio_accounting_client.get_portfolio_positions(portfolio_id)
+
+        # Assert - Should include all positions including negative and zero
+        assert result == {"SEC1": 100, "SEC2": -50, "SEC3": 0}
+
+    @pytest.mark.asyncio
+    async def test_get_cash_position_success(
+        self, portfolio_accounting_client, mock_base_client
+    ):
+        """Test successful cash position retrieval."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "7500.50",
+            "securityCount": 0,
+            "securities": [],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Act
+        result = await portfolio_accounting_client.get_cash_position(portfolio_id)
+
         # Assert
-        assert result == Decimal("15000.00")
+        assert result == Decimal("7500.50")
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_balances_legacy_method(
+        self,
+        portfolio_accounting_client,
+        mock_base_client,
+        mock_security_client,
+        mock_pricing_client,
+    ):
+        """Test the legacy get_portfolio_balances method for backward compatibility."""
+        # Arrange
+        portfolio_id = "683b6d88a29ee10e8b499643"
+        mock_summary = {
+            "portfolioId": "683b6d88a29ee10e8b499643",
+            "cashBalance": "2500",
+            "securityCount": 1,
+            "securities": [
+                {"securityId": "683b69d420f302c879a5fef0", "netQuantity": "100"}
+            ],
+        }
+        mock_base_client._make_request.return_value = mock_summary
+
+        # Act
+        result = await portfolio_accounting_client.get_portfolio_balances(portfolio_id)
+
+        # Assert - Should convert to legacy format
+        assert len(result) == 2  # Cash + 1 security
+
+        # Check cash entry
+        cash_entry = next(entry for entry in result if entry.get("cash", False))
+        assert cash_entry["marketValue"] == Decimal("2500")
+
+        # Check security entry
+        security_entry = next(entry for entry in result if "securityId" in entry)
+        assert security_entry["securityId"] == "683b69d420f302c879a5fef0"
+        assert security_entry["quantity"] == 100
+        assert security_entry["marketValue"] == Decimal("15000")  # 100 * 150.0
+
+    @pytest.mark.asyncio
+    async def test_caching_functionality(
+        self, portfolio_accounting_client, mock_security_client, mock_pricing_client
+    ):
+        """Test that caching works for securities and prices."""
+        # Clear any existing cache
+        portfolio_accounting_client._securities_cache.clear()
+        portfolio_accounting_client._prices_cache.clear()
+
+        # Test security caching
+        security_id = "683b69d420f302c879a5fef0"
+
+        # First call - should hit service
+        ticker1 = await portfolio_accounting_client._get_security_ticker(security_id)
+        assert ticker1 == "AAPL"
+        mock_security_client.get_security.assert_called_once_with(security_id)
+
+        # Second call - should hit cache
+        mock_security_client.reset_mock()
+        ticker2 = await portfolio_accounting_client._get_security_ticker(security_id)
+        assert ticker2 == "AAPL"
+        mock_security_client.get_security.assert_not_called()
+
+        # Test price caching
+        ticker = "AAPL"
+
+        # First call - should hit service
+        price1 = await portfolio_accounting_client._get_price_by_ticker(ticker)
+        assert price1 == Decimal("150.0")
+        mock_pricing_client._base_client._make_request.assert_called_once_with(
+            "GET", "/api/v1/price/AAPL"
+        )
+
+        # Second call - should hit cache
+        mock_pricing_client._base_client.reset_mock()
+        price2 = await portfolio_accounting_client._get_price_by_ticker(ticker)
+        assert price2 == Decimal("150.0")
+        mock_pricing_client._base_client._make_request.assert_not_called()
 
 
 @pytest.mark.unit
