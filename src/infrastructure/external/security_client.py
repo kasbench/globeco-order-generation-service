@@ -80,7 +80,7 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             )
 
             logger.info(
-                f"Retrieved security metadata for {security_id}: {response.get('symbol', 'Unknown')}"
+                f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
             )
             return response
 

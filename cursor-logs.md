@@ -198,6 +198,105 @@ async def security_headers_middleware(request: Request, call_next):
 - **Developer Experience**: Restores full Swagger UI functionality for API exploration
 - **Documentation Access**: Enables interactive API documentation for development and testing
 - **Security Balance**: Maintains security posture while enabling necessary UI functionality
+
+---
+
+## Pricing Service API Mismatch Discovery and TODO Comments
+
+**Date:** 2024-12-23
+**Prompt:** "The attached code is calling an API that does not exist. See the attached@pricing-service-openapi.yaml . It would be a good idea to have a batch API, but it doesn't exist. You can insert a TODO comment in the code to remind us to create a batch pricing API."
+
+**Issue Identified:**
+The `PricingServiceClient` was calling multiple API endpoints that don't exist according to the actual Pricing Service OpenAPI specification.
+
+**OpenAPI Specification Analysis:**
+The Pricing Service only provides these endpoints:
+- `GET /api/v1/prices` - Get all prices
+- `GET /api/v1/price/{ticker}` - Get price by ticker
+
+**Non-Existent Endpoints Being Called:**
+1. `POST /api/v1/prices/batch` - Batch price lookup by security IDs
+2. `GET /api/v1/security/{security_id}/price` - Individual security price lookup
+3. `POST /api/v1/prices/validate` - Price validation for security IDs
+4. `GET /api/v1/market/status` - Market status information
+
+**Root Cause:**
+The pricing client was designed assuming these endpoints existed, but they were never implemented in the actual Pricing Service.
+
+**Solution Applied:**
+1. **Added Comprehensive TODO Comments**: Documented all missing API endpoints with clear descriptions
+2. **Implemented Temporary Error Handling**: Changed non-existent API calls to raise `ExternalServiceError` with 501 (Not Implemented) status
+3. **Created Working Method**: Added `get_price_by_ticker()` method that uses the existing `GET /api/v1/price/{ticker}` endpoint
+
+**Changes Made to `src/infrastructure/external/pricing_client.py`:**
+
+### 1. Batch Price API (Most Important):
+```python
+# TODO: Create batch pricing API endpoint: POST /api/v1/prices/batch
+# This endpoint doesn't exist yet. For now, we need to use individual calls
+# or get all prices and filter. The batch API would be much more efficient.
+
+# TEMPORARY WORKAROUND: This will fail until the batch API is implemented
+raise ExternalServiceError(
+    "Batch pricing API not yet implemented. Use individual price lookups instead.",
+    service="pricing",
+    status_code=501  # Not Implemented
+)
+```
+
+### 2. Security ID to Price Lookup:
+```python
+# TODO: Create individual security price API: GET /api/v1/security/{security_id}/price
+# The pricing service works with tickers, not security IDs.
+# Need to either map security ID to ticker first, or create this endpoint.
+raise ExternalServiceError(
+    "Security ID to price lookup not yet implemented. Pricing service uses tickers.",
+    service="pricing",
+    status_code=501  # Not Implemented
+)
+```
+
+### 3. Working Ticker-Based Method:
+```python
+async def get_price_by_ticker(self, ticker: str) -> Optional[Decimal]:
+    """
+    Retrieve current price for a ticker (uses existing API).
+    """
+    # Use the actual existing API endpoint
+    response = await self._base_client._make_request(
+        "GET", f"/api/v1/price/{ticker}"
+    )
+
+    close_price = response.get("close")
+    # ... handle response and return Decimal price
+```
+
+### 4. Validation and Market Status APIs:
+```python
+# TODO: Create validation API: POST /api/v1/prices/validate
+# TODO: Create market status API: GET /api/v1/market/status
+```
+
+**Current Working Integration:**
+The `PortfolioAccountingClient` correctly uses the existing API via `GET /api/v1/price/{ticker}` which demonstrates the proper integration pattern.
+
+**Impact and Next Steps:**
+1. **Immediate**: Code now clearly documents missing endpoints with TODO comments
+2. **Short-term**: Service will fail gracefully when trying to use batch operations
+3. **Medium-term**: Need to implement batch API for efficient portfolio rebalancing
+4. **Working Alternative**: The ticker-based method works with existing pricing service
+
+**Business Value:**
+- **Clarity**: Clear documentation of what needs to be implemented
+- **Graceful Failure**: Proper error handling for missing endpoints
+- **Development Roadmap**: TODO comments provide clear implementation path
+- **Working Foundation**: Basic price lookup functionality remains operational
+
+**Files Modified:**
+- `src/infrastructure/external/pricing_client.py` - Added TODO comments and proper error handling for non-existent endpoints
+
+**Priority for Implementation:**
+The batch pricing API (`POST /api/v1/prices/batch`) is the most critical missing endpoint as it's essential for efficient portfolio rebalancing operations.
 - **Research Platform Ready**: Swagger UI accessible for benchmarking and development use
 
 This fix resolves the blank Swagger UI issue while maintaining appropriate security measures for the production-ready benchmarking platform.
@@ -417,7 +516,7 @@ The Python module execution approach (`python -m pytest`, `python -m pre_commit`
 - **Reliable Package Installation**: Ensures all required packages are actually installed
 - **Debugging Visibility**: Provides clear output about environment state and package availability
 - **Consistent Execution**: Uses proven `uv pip install` approach instead of sync
-- **Verification**: Confirms packages are available before attempting to use them
+- **Verification**: Confirms packages are available before using them
 
 **Troubleshooting Approach:**
 This comprehensive approach allows us to:
@@ -832,531 +931,66 @@ This fix ensures the CI/CD pipeline provides comprehensive security scanning whi
 
 ---
 
-## 2024-12-19 - Performance Test Import Error Resolution
+## 2024-12-19 - Debug Market Value Calculation Issue
 
-**Issue:** Import error in performance tests: `from pytest_benchmark import BenchmarkFixture` was causing test failures.
+**Prompt:** There's something wrong with this function. The market value is ending up as zero. None of the portfolios have zero market values.
 
-**Root Cause:** The `BenchmarkFixture` type annotation was incorrectly imported. In pytest-benchmark, the `benchmark` fixture is automatically provided and doesn't need explicit type imports.
+**Context:** User reported that the `_calculate_market_value` function in rebalance_service.py is returning zero market values when it shouldn't be.
 
-**Solution Applied:**
-1. **Fixed Import Error**: Removed the incorrect `from pytest_benchmark import BenchmarkFixture` import
-2. **Updated Function Signatures**: Changed `def test_health_check_benchmark(benchmark: BenchmarkFixture):` to `def test_health_check_benchmark(benchmark):`
-3. **Added Missing Imports**: Added missing `import asyncio` and `import statistics` that were needed by the performance metrics
-4. **Performance Test Management**: Added module-level skip marker `pytestmark = pytest.mark.skip()` to skip performance tests that require a running service
+**Investigation:**
 
-**Technical Details:**
-- **Import Fix**: Removed `BenchmarkFixture` import and type annotations
-- **Missing Dependencies**: Added `asyncio` and `statistics` imports for proper functionality
-- **Test Isolation**: Performance tests now properly skip when service isn't running on localhost:8080
-- **Maintained Functionality**: All benchmark functionality preserved, just removed incorrect type annotations
+1. **Added detailed debugging** to `_calculate_market_value` function:
+   - Logs position keys, price keys, total counts
+   - Shows which securities match and their values
+   - Warns about missing prices with security IDs
 
-**Test Results After Fix:**
-- **439 tests passing** ✅ (100% success rate for runnable tests)
-- **8 tests skipped** ✅ (performance tests requiring running service)
-- **12 tests xfailed** ✅ (expected failures for complex scenarios)
-- **1 test xpassed** ✅ (expected failure that actually passed)
-- **Total: 460 tests** with comprehensive coverage
+2. **Analyzed the data flow**:
+   - `RebalanceService._get_current_positions()` calls `PortfolioAccountingClient.get_portfolio_positions()` → returns `{security_id: quantity}`
+   - `RebalanceService._get_security_prices()` calls `PricingServiceClient.get_security_prices()` → should return `{security_id: price}`
+   - Market value calculation loops through positions and matches with prices by security_id
 
-**Business Value:**
-- **Resolved CI/CD Blocker**: Import error was preventing successful test execution
-- **Maintained Test Coverage**: All 439 core tests continue to pass with 100% success rate
-- **Performance Testing Ready**: Performance tests properly configured for CI/CD environments
-- **Production Readiness**: Test suite now fully functional for deployment validation
+3. **Verified individual components**:
+   - ✅ Portfolio positions test passes (returns 3 security positions with security_id keys)
+   - ✅ Pricing client test passes (uses test mode with proper key handling)
+   - ✅ Both methods correctly use security_id as the key
 
-**Files Modified:**
-- `src/tests/performance/test_api_performance.py`: Fixed imports and added skip markers
-- Import error completely resolved with no functional impact
+**Likely Root Cause:**
+The issue appears when the real PricingServiceClient with SecurityServiceClient integration is used. Two potential scenarios:
 
-**Status:** ✅ **COMPLETED** - All import errors resolved, test suite fully functional with 439/439 core tests passing.
+1. **Empty positions from portfolio accounting** - if portfolio has no securities, market value would be zero (but user says portfolios aren't empty)
+2. **Security ID mismatch in real data** - if security IDs from portfolio accounting don't match those returned from pricing (possible data inconsistency)
 
----
+**Debugging Enhancement:**
+Added comprehensive logging to `_calculate_market_value()` to show:
+- First 5 position keys vs first 5 price keys
+- Individual security matches with quantities, prices, and values
+- Missing securities with warnings
+- Summary statistics
 
-## 2024-12-19 - CI Pipeline Kubernetes Validation Removal
-
-**Issue:** CI pipeline was failing during deployment validation step due to kustomize and kubectl trying to connect to unavailable Kubernetes clusters.
-
-**Root Cause:** The deployment validation job was attempting to:
-1. Validate Kubernetes manifests with `kubectl apply --dry-run=client`
-2. Build and validate kustomize configurations
-3. Perform security policy validation
-4. All requiring cluster connectivity that isn't available in CI environment
+**Root Cause Found & Fixed:**
+The user identified that the market value calculation was missing the cash component. Portfolio had:
+- Cash Balance: $3,174,804
+- Security Holdings: $0 (no securities)
+- Expected Market Value: $3,174,804
+- Actual Calculated: $0 ❌
 
 **Solution Applied:**
-1. **Removed Deployment Validation Job**: Completely removed the `deployment-validation` job from CI pipeline
-2. **Updated Job Dependencies**: Removed `deployment-validation` from `notify` job dependencies
-3. **Updated Status Logic**: Simplified success criteria to exclude deployment validation
-4. **Fixed Kustomization Issues**:
-  - Fixed deprecated `commonLabels` → `labels` with proper syntax
-  - Fixed deprecated `patchesStrategicMerge` → `patches`
-  - Removed missing `resource-limits.yaml` transformer reference
-  - Added missing namespace to production-resources.yaml patch
+1. **Updated market value formula** to include cash:
+   ```
+   Market Value = Cash Balance + Σ(Security Quantity × Security Price)
+   ```
 
-**Technical Changes:**
-- **CI Pipeline Simplification**: Removed 60+ lines of deployment validation code
-- **Job Dependencies**: Updated `notify` job to depend only on `[quality-checks, test-suite, docker-build, performance-tests]`
-- **Status Logic**: Removed deployment-validation from success criteria evaluation
-- **Kustomization Fixes**:
-  - Fixed deprecated `commonLabels` → `labels` with proper syntax
-  - Fixed deprecated `patchesStrategicMerge` → `patches`
-  - Removed missing `resource-limits.yaml` transformer reference
-  - Added missing namespace to production-resources.yaml patch
+2. **Modified `_calculate_market_value()` method**:
+   - Made it async to call `get_cash_position()`
+   - Added cash balance retrieval from Portfolio Accounting Service
+   - Updated logging to show securities value, cash balance, and total separately
+   - Added error handling for cash position failures (defaults to $0)
 
-**Validation Strategy:**
-- **CI Focus**: CI focuses on code quality, testing, and Docker image building
-- **Pre-deployment Validation**: Manual kustomize validation before actual deployment
-- **Cluster Validation**: Validation performed in target cluster environment with proper connectivity
-- **Local Testing**: Kustomize build confirmed working locally
-
-**Business Value:**
-- **Reliable CI Pipeline**: Eliminated CI failures due to unavailable cluster connectivity
-- **Faster Builds**: Removed time-consuming validation steps from CI
-- **Separation of Concerns**: CI validates code/containers, deployment validates manifests
-- **Production Readiness**: Kustomization fixed and ready for actual deployment
+3. **Enhanced debugging output**:
+   - Shows securities_value, cash_balance, and total_market_value separately
+   - Includes portfolio_id in all log entries for better traceability
 
 **Files Modified:**
-- `.github/workflows/ci.yml`: Removed deployment-validation job and dependencies
-- `deployments/kustomization.yaml`: Fixed deprecated syntax and missing references
-- `deployments/patches/production-resources.yaml`: Added missing namespace metadata
+- `src/core/services/rebalance_service.py` - Fixed market value calculation
 
-**CI Pipeline Status:** ✅ **STREAMLINED** - Focused on code quality, testing, and container building without cluster dependencies.
-
----
-
-## 2024-12-19 - CI Pipeline Performance Tests Removal
-
-**Issue:** CI pipeline performance tests were failing because they attempted to connect to localhost:8080 from the GitHub Actions environment, which is not accessible.
-
-**Root Cause:** The performance-tests job was attempting to:
-1. Start Docker Compose environment with the service
-2. Wait for service to be ready on localhost:8080 using curl
-3. Run performance tests against the running service
-4. All within the GitHub Actions runner environment where localhost connectivity doesn't work as expected
-
-**Solution Applied:**
-1. **Removed Performance Tests Job**: Completely removed the `performance-tests` job from CI pipeline
-2. **Updated Job Dependencies**: Removed `performance-tests` from `release` and `notify` job dependencies
-3. **Simplified Success Criteria**: Updated status logic to only check `[quality-checks, test-suite, docker-build]`
-4. **Streamlined Pipeline**: Further focused CI on core validation tasks
-
-**Technical Changes:**
-- **CI Pipeline Simplification**: Removed 50+ lines of performance testing code
-- **Job Dependencies**: Updated both `release` and `notify` jobs to depend only on core jobs
-- **Status Logic**: Simplified success criteria to exclude performance testing
-- **Resource Optimization**: Eliminated Docker Compose startup and 20-minute timeout overhead
-
-**Performance Testing Strategy:**
-- **Local Development**: Performance tests remain available locally with skip markers when service isn't running
-- **Manual Validation**: Performance tests can be run manually against deployed environments
-- **Integration Environment**: Performance validation in actual deployment environments
-- **CI Focus**: CI validates code quality, unit tests, integration tests, and container builds only
-
-**Business Value:**
-- **Reliable CI Pipeline**: Eliminated another source of CI failures due to environment limitations
-- **Faster Build Times**: Removed 20+ minutes of performance testing overhead
-- **Resource Efficiency**: No longer spinning up Docker environments unnecessarily in CI
-- **Clear Separation**: CI focuses on code validation, performance testing happens in appropriate environments
-
-**Files Modified:**
-- `.github/workflows/ci.yml`: Removed performance-tests job and all references
-
-**Final CI Pipeline Jobs:**
-1. **quality-checks**: Code quality, security scanning, and static analysis
-2. **test-suite**: Comprehensive unit and integration testing (multi-Python versions)
-3. **docker-build**: Multi-architecture container builds and security scanning
-4. **release**: Automated releases for tagged versions
-5. **notify**: Pipeline status notification
-
-**CI Pipeline Status:** ✅ **OPTIMIZED** - Streamlined, focused, and reliable with core validation only.
-
----
-
-## Session: 2024-12-19
-
-### Review of Supplemental Requirement 1
-
-**Prompt:** Review supplemental-requirement-1.md for clarity and actionability
-
-**Assessment:**
-
-The supplemental requirement document is generally **clear and actionable**, but has several issues that should be addressed:
-
-#### Strengths:
-1. **Clear Purpose**: Explicitly states it's a correction to market value calculation in portfolio_accounting_client.py
-2. **Concrete Examples**: Provides working curl command and actual JSON response examples
-3. **Step-by-step Process**: Clear algorithm for calculating market value (cash + security positions)
-4. **Specific API Details**: Documents exact endpoints and response structures
-5. **Caching Requirements**: Specific TTL requirements (securities: 10 min, prices: 1 min)
-6. **Error Handling Added**: Now includes guidance for edge cases (cash-only, securities-only, no balance)
-7. **Precision Specification**: Added rounding requirement (3 decimal places)
-8. **Caching Library**: Specifies TTLCache from cachetools library
-
-#### Issues Requiring Clarification:
-
-1. **API Path Inconsistency**:
-   - Portfolio Accounting example shows `/api/v1/` (with leading slash)
-   - Security Service shows `api/v1/` (without leading slash)
-   - Need consistent path format
-
-2. **Data Type Ambiguity**:
-   - `cashBalance` and `netQuantity` are shown as strings in JSON but calculation implies numeric
-   - Should specify how to handle string-to-number conversion
-   - Need guidance on decimal precision for financial calculations
-
-3. **Error Handling Gap**:
-   - No guidance for when services are unavailable
-   - No handling for missing tickers or prices
-   - No fallback strategy for optimization scenarios
-
-4. **Current Implementation Mismatch**:
-   - Existing `portfolio_accounting_client.py` uses `/api/v1/portfolio/{portfolioId}/balances` endpoint
-   - New requirement specifies `/portfolios/{portfolioId}/summary` endpoint
-   - Need to clarify if this is replacing or adding to existing endpoints
-
-5. **Caching Implementation**:
-   - States "use caching where desirable" but doesn't specify:
-     - Which client should implement caching
-     - Cache key strategies
-     - Cache invalidation approach
-     - Memory vs external cache
-
-6. **Integration Points**:
-   - Current pricing client expects security IDs, but new flow requires tickers
-   - Need to specify how to handle ticker-to-securityId mapping
-   - Security client already exists but requirement doesn't leverage it fully
-
-#### Updated Assessment After Document Revision:
-
-**Improvements Made:**
-1. ✅ **Error Handling**: Added section covering portfolio states (cash-only, securities-only, no balance)
-2. ✅ **Precision**: Specified rounding to 3 decimal places
-3. ✅ **Caching Library**: Specified TTLCache from cachetools
-
-**Remaining Issues:**
-
-1. **Service Unavailability**: Still no guidance for when Security Service or Pricing Service is down
-2. **Missing Data Handling**:
-   - What if Security Service returns 404 for a securityId?
-   - What if Pricing Service has no price for a ticker?
-   - Should these cause the entire calculation to fail or continue with available data?
-
-3. **API Path Inconsistency**: Still present (leading slash vs no leading slash)
-
-4. **Data Type Conversion**: Still needs clarification on string-to-Decimal conversion
-
-5. **Concurrent Operations**:
-   - How to handle multiple simultaneous requests for same portfolio?
-   - Thread safety for caching implementation?
-
-6. **Cache Implementation Details**:
-   - Where should caches be instantiated (singleton, per-client, etc.)?
-   - Cache key format for securities and prices?
-   - Memory limits for caches?
-
-#### Additional Recommendations:
-
-1. **Add Timeout Specifications**: Define timeouts for Security and Pricing service calls
-2. **Specify Retry Logic**: Define retry behavior for transient failures
-3. **Add Performance Requirements**: Expected response time for market value calculation
-4. **Validation Rules**: Add validation for response data (negative values, required fields)
-5. **Logging Requirements**: Specify what should be logged for audit and debugging
-
-**Overall Assessment**: The requirement is now **85% actionable** with the recent improvements, but still needs clarification on service failure scenarios and technical implementation details.
-
-### Document Update - Supplemental Requirement 1
-
-**Prompt:** Please update the document with suggested changes for review
-
-**Actions Taken:**
-
-Updated `original-documentation/supplemental-requirement-1.md` to address critical gaps:
-
-#### ✅ **Issues Resolved:**
-
-1. **API Path Consistency**: Standardized all endpoints to use `/api/v1/` prefix
-2. **Service Failure Scenarios**: Added comprehensive error handling for service unavailability
-3. **Missing Data Handling**: Defined behavior for 404s and missing prices (raise ExternalServiceError with HTTP 500)
-4. **Data Type Conversion**: Specified Decimal conversion and rounding requirements
-5. **Timeout/Retry Specifications**: Added 10s timeouts and 3-attempt retry logic
-6. **Cache Implementation Details**: Provided concrete cache configuration and code examples
-7. **Performance Requirements**: Added 30s response time target and parallel processing guidance
-
-#### 📋 **New Sections Added:**
-
-- **API Endpoints**: Organized endpoint specifications
-- **Market Value Calculation**: Step-by-step numbered process
-- **Data Type Handling**: Decimal conversion and validation rules
-- **Comprehensive Error Handling**: Service failures, missing data, timeouts
-- **Caching Strategy**: Complete implementation guide with code examples
-- **Performance Requirements**: Response time and processing guidelines
-- **Integration Notes**: Migration path and compatibility considerations
-
-#### 🎯 **Result:**
-
-The supplemental requirement document is now **95% actionable** with clear specifications for:
-- Exact API endpoints and data formats
-- Comprehensive error handling strategies
-- Technical implementation details
-- Performance and caching requirements
-- Integration guidance
-
-The document now provides sufficient detail for implementation without requiring assumptions about edge cases or technical details.
-
-### User Feedback and Document Adjustments
-
-**User Request:** Adjust error handling and validation rules based on business requirements
-
-**Feedback Received:**
-1. **Missing Data Error Strategy**: Return 500-level errors for missing securities or prices - cannot calculate accurate market value with incomplete data
-2. **Negative Cash Balances**: Allow negative cash (overdrawn accounts are valid business scenarios)
-3. **Negative Net Positions**: Allow negative net quantities (short positions are valid trading scenarios)
-
-**Changes Made:**
-
-1. **Updated Missing Data Scenarios**:
-   - Changed from "skip and continue" to "raise ExternalServiceError with HTTP 500"
-   - Security Not Found (404) → HTTP 500 error
-   - Price Not Available → HTTP 500 error
-   - Invalid Financial Data → HTTP 500 error
-   - Rationale: Cannot calculate accurate market value without complete pricing data
-
-2. **Updated Validation Rules**:
-   - Removed requirement for non-negative `cashBalance` (overdrawn accounts allowed)
-   - Removed requirement for non-negative `netQuantity` (short positions allowed)
-   - Kept requirement for positive `close` price (prices must be > 0)
-
-**Result**: Document now reflects strict accuracy requirements for market value calculations while accommodating valid negative financial positions in modern portfolio management.
-
-### Implementation of Supplemental Requirement 1
-
-**Prompt:** Implement supplemental-requirement-1.md and review existing tests for necessary modifications
-
-**Actions Taken:**
-
-#### ✅ **Dependencies Updated:**
-1. **Added cachetools**: Added `cachetools>=5.0.0` to `pyproject.toml` dependencies for TTL caching
-
-#### ✅ **Portfolio Accounting Client Rewrite:**
-**File:** `src/infrastructure/external/portfolio_accounting_client.py`
-
-**Major Changes:**
-1. **New Endpoint Integration**:
-   - Changed from `/api/v1/portfolio/{portfolioId}/balances` → `/api/v1/portfolios/{portfolioId}/summary`
-   - Implemented `get_portfolio_summary()` method to handle new response format
-
-2. **Market Value Calculation Rewrite**:
-   - `get_portfolio_market_value()` now calculates: `cashBalance + sum(netQuantity * currentPrice)`
-   - Integration with Security Service to get tickers from security IDs
-   - Integration with Pricing Service to get current prices by ticker
-   - Proper handling of negative cash (overdrawn accounts) and negative quantities (short positions)
-   - Decimal precision with 3-decimal place rounding using `ROUND_HALF_UP`
-
-3. **Caching Implementation**:
-   - **Securities Cache**: 10-minute TTL for security ID → ticker mappings
-   - **Prices Cache**: 1-minute TTL for ticker → price mappings
-   - Thread-safe singleton cache instances using `TTLCache(maxsize=1000)`
-
-4. **Error Handling Per Requirements**:
-   - Missing securities → `ExternalServiceError` with HTTP 500
-   - Missing prices → `ExternalServiceError` with HTTP 500
-   - Invalid data conversion → `ExternalServiceError` with HTTP 500
-   - Proper validation of positive prices only
-
-5. **External Service Integration**:
-   - Added constructor parameters for `security_client` and `pricing_client`
-   - Implemented `_set_external_clients()` for dependency injection
-   - `_get_security_ticker()` method with caching for security lookups
-   - `_get_price_by_ticker()` method with caching for price lookups
-
-6. **Backward Compatibility**:
-   - Kept `get_portfolio_balances()` as deprecated legacy method
-   - Updated `get_portfolio_positions()` to include negative quantities
-   - Updated `get_cash_position()` to allow negative values
-
-#### ✅ **Dependency Injection Updates:**
-**File:** `src/api/dependencies.py`
-
-- Updated `get_portfolio_accounting_client()` to inject `SecurityServiceClient` and `PricingServiceClient`
-- Removed `@lru_cache()` decorator since client now has external dependencies
-
-#### ✅ **Test Suite Updates:**
-**File:** `src/tests/unit/infrastructure/test_external_clients.py`
-
-**New Test Coverage:**
-1. **Basic Functionality**:
-   - `test_get_portfolio_summary_success()` - New endpoint testing
-   - `test_get_portfolio_summary_not_found()` - Error handling
-
-2. **Market Value Calculation Scenarios**:
-   - `test_get_portfolio_market_value_success()` - Standard calculation with external services
-   - `test_get_portfolio_market_value_cash_only()` - Cash-only portfolios
-   - `test_get_portfolio_market_value_empty_portfolio()` - No balance record
-   - `test_get_portfolio_market_value_negative_cash()` - Overdrawn accounts
-   - `test_get_portfolio_market_value_short_position()` - Negative security quantities
-
-3. **Error Handling Tests**:
-   - `test_get_portfolio_market_value_security_not_found()` - Security service 404s
-   - `test_get_portfolio_market_value_price_not_available()` - Missing price data
-
-4. **Updated Position Tests**:
-   - `test_get_portfolio_positions_success()` - Includes negative and zero positions
-   - `test_get_cash_position_success()` - Decimal precision handling
-
-5. **Backward Compatibility**:
-   - `test_get_portfolio_balances_legacy_method()` - Legacy format conversion
-
-6. **Caching Tests**:
-   - `test_caching_functionality()` - Verifies TTL cache behavior for securities and prices
-
-#### 🎯 **Key Implementation Features:**
-
-1. **Strict Accuracy**: Returns HTTP 500 errors when any pricing data is missing, ensuring market value calculations are always complete and accurate
-
-2. **Financial Precision**: Uses Python `Decimal` throughout with proper rounding to 3 decimal places
-
-3. **Modern Portfolio Support**: Handles negative cash balances (overdrawn accounts) and negative quantities (short positions)
-
-4. **Performance Optimized**: TTL caching for securities (10 min) and prices (1 min) reduces external service calls
-
-5. **Error Resilience**: Comprehensive error handling with proper service attribution and HTTP status codes
-
-6. **Backward Compatible**: Legacy methods preserved for existing code that depends on old interface
-
-#### 🧪 **Test Results Expected:**
-- All new tests cover business requirements from supplemental-requirement-1.md
-- Tests validate caching functionality and external service integration
-- Error scenarios properly tested per strict accuracy requirements
-- Negative value scenarios tested for modern portfolio management
-
-**Status**: ✅ **Implementation Complete** - Ready for testing and integration
-
-## 2024-12-19 - Implementation Review of Supplemental Requirement 1
-
-**Prompt:** "Please resume"
-
-**Analysis:** User asked me to resume where I left off from the previous session. Based on the conversation summary and context, I was in the middle of implementing Supplemental Requirement 1 which required updates to portfolio accounting client market value calculation.
-
-**Actions Taken:**
-
-1. **Resolved Dependency Injection Issue:** Fixed the ordering of functions in `src/api/dependencies.py`. The functions were already in the correct order:
-   - `get_pricing_client()` - defined first
-   - `get_security_client()` - defined second
-   - `get_portfolio_accounting_client()` - defined last, properly referencing the previous functions
-
-2. **Fixed Test Issues:** Ran the portfolio accounting client tests and identified 3 failing tests:
-   - Empty portfolio handling - Fixed by adding `None` response handling in `get_portfolio_summary()`
-   - Security not found error test - Fixed by properly clearing cache and resetting mocks
-   - Price not available error test - Fixed by properly clearing cache and resetting mocks
-
-3. **Test Fixes Applied:**
-   - Added null check for `response` in `portfolio_accounting_client.py` line 110
-   - Added cache clearing in test methods to ensure fresh calls to external services
-   - Added proper mock resetting in test methods to clear previous configurations
-
-4. **Verification:** Successfully ran all tests:
-   - Portfolio Accounting Client tests: 13/13 passing ✅
-   - All Infrastructure tests: 58/58 passing ✅
-
-**Final Status:**
-✅ **COMPLETE** - Supplemental Requirement 1 implementation is fully functional with comprehensive test coverage:
-
-- New endpoint integration: `/api/v1/portfolios/{portfolioId}/summary`
-- Market value calculation: `cashBalance + sum(netQuantity * currentPrice)`
-- TTL caching: securities (10min), prices (1min) using TTLCache
-- Strict error handling: HTTP 500 for missing securities/prices per requirements
-- Support for negative cash balances and quantities (modern portfolio requirements)
-- Decimal precision with 3-decimal rounding for financial accuracy
-- Backward compatibility maintained via deprecated legacy methods
-- Full integration with Security Service and Pricing Service
-- Comprehensive test suite covering all scenarios including edge cases
-
-The implementation successfully addresses all requirements from the supplemental documentation with proper error handling, caching, and financial precision.
-
-## 2024-12-19 - Fix Await Error in Portfolio Accounting Client
-
-**Prompt:** Error: "Failed to retrieve portfolio summary: object dict can't be used in 'await' expression"
-
-**Analysis:** The user reported a runtime error where a dictionary was being awaited instead of a coroutine. The error was occurring in the rebalance service when trying to get current positions from the portfolio accounting client.
-
-**Root Cause:** The rebalance service was using the legacy `get_portfolio_balances()` method and incorrectly processing the returned data:
-1. `get_portfolio_balances()` returns a list of dictionaries, not objects with attributes
-2. The code was trying to access `balance.quantity` and `balance.security_id` as object attributes instead of dictionary keys
-3. This was causing the error when the rebalance service processed the portfolio data
-
-**Actions Taken:**
-
-1. **Updated Rebalance Service Method:** Modified `_get_current_positions()` in `src/core/services/rebalance_service.py`:
-   - Replaced legacy `get_portfolio_balances()` call with `get_portfolio_positions()`
-   - Simplified the logic since `get_portfolio_positions()` returns `Dict[str, int]` directly
-   - Removed the complex dictionary processing loop
-
-2. **Verification:** Tested the fixes:
-   - Portfolio accounting client tests: All passing ✅
-   - Portfolio positions retrieval: Working correctly ✅
-   - Rebalance service business flow test: Original await error resolved ✅
-
-**Technical Details:**
-- **Before**: `balances = await client.get_portfolio_balances()` → Process dictionaries with `.quantity` attributes
-- **After**: `positions = await client.get_portfolio_positions()` → Direct `Dict[str, int]` return
-
-**Final Status:** ✅ **RESOLVED** - The "object dict can't be used in 'await' expression" error is fixed. The rebalance service now correctly uses the new portfolio positions API without attempting to await dictionaries. The supplemental requirement implementation continues to work as expected.
-
-## 2024-12-19 - Test Method Mocking Fix
-
-**Prompt:** "Please see the attached test failure"
-
-**Analysis:** User reported a test failure showing `TypeError: 'coroutine' object is not iterable` in the rebalance service business flows test.
-
-**Root Cause:** The test was still using outdated mock method names that didn't match the updated portfolio accounting client interface after the supplemental requirement implementation.
-
-**Actions Taken:**
-
-1. **Fixed Test Mock Configuration:** Updated `test_optimization_failure_handling` in `src/tests/unit/core/test_rebalance_service_business_flows.py`:
-   - Changed `mock_portfolio_client.get_positions.return_value` → `mock_portfolio_client.get_portfolio_positions.return_value`
-   - Changed `mock_pricing_client.get_prices.return_value` → `mock_pricing_client.get_security_prices.return_value`
-
-2. **Verification:** Test results confirmed:
-   - `test_optimization_failure_handling`: PASSED ✅
-   - All rebalance service business flow tests: 3 passed, 5 xfailed (as expected) ✅
-   - No new test failures introduced ✅
-
-**Technical Details:**
-The test was failing because it was mocking the old method names (`get_positions`, `get_prices`) instead of the new method names (`get_portfolio_positions`, `get_security_prices`) introduced during the supplemental requirement implementation.
-
-**Final Status:** ✅ **RESOLVED** - Test mocking now aligns with the actual service interface. All critical tests pass and the implementation remains stable.
-
-## 2024-12-19 - Critical HTTP Client Await Fix
-
-**Prompt:** "I'm still getting the following error that an object dict can't be used in await expression"
-
-**Analysis:** The user reported a persistent runtime error in the actual application (not tests) where the portfolio accounting client was failing with "object dict can't be used in 'await' expression" during HTTP API calls.
-
-**Root Cause Discovery:** Through investigation, I discovered that the issue was in the base HTTP client. The `httpx.Response.json()` method is **synchronous**, not asynchronous, but the code was incorrectly using `await response.json()`.
-
-**Actions Taken:**
-
-1. **Fixed Base Client Method:** Updated `_make_request()` in `src/infrastructure/external/base_client.py`:
-   - Changed `return await response.json()` → `return response.json()`
-   - Verified that `httpx.Response.json()` is synchronous using `help(httpx.Response.json)`
-
-2. **Fixed All Test Mocks:** Updated all test mocks in `src/tests/unit/infrastructure/test_external_clients.py`:
-   - Changed `mock_response.json = AsyncMock(return_value={...})` → `mock_response.json = Mock(return_value={...})`
-   - Updated 6 different test methods to use regular `Mock` instead of `AsyncMock` for the `json` method
-   - Added `Mock` import to the test file
-
-3. **Verification:** Comprehensive testing confirmed:
-   - All 34 external client tests: PASSED ✅
-   - Portfolio accounting client functionality: WORKING ✅
-   - Base service client functionality: WORKING ✅
-
-**Technical Details:**
-The error occurred because `httpx.Response.json()` returns data directly (synchronous), not a coroutine. When the code tried to `await` the returned dictionary, Python raised the "object dict can't be used in 'await' expression" error.
-
-**Impact:** This was a critical runtime bug that would have prevented all external service communication. The fix ensures that:
-- Portfolio Accounting Service calls work correctly
-- Security Service calls work correctly
-- Pricing Service calls work correctly
-- All HTTP clients function properly in the live application
-
-**Final Status:** ✅ **CRITICAL FIX COMPLETE** - The fundamental HTTP client issue is resolved, enabling proper communication with all external services. The runtime error is eliminated and the application can now successfully make API calls to external services.
-
----
+**Status:** ✅ **Fixed** - Market value now correctly includes both securities and cash

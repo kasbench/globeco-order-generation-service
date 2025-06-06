@@ -53,7 +53,7 @@ def set_correlation_id(correlation_id: str) -> None:
     correlation_id_var.set(correlation_id)
 
 
-def configure_structured_logging(log_level: str = "INFO") -> None:
+def configure_structured_logging(log_level: str = "DEBUG") -> None:
     """
     Configure structured logging with correlation IDs.
 

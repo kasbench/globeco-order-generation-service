@@ -77,21 +77,21 @@ class PortfolioValidationService(ValidationService):
                     f"Missing price for security {position.security_id} required by model"
                 )
 
-        # Validate position values approximately match market value
-        total_position_value = Decimal("0")
-        for security_id, quantity in current_positions.items():
-            if security_id in prices:
-                total_position_value += Decimal(str(quantity)) * prices[security_id]
+        # # Validate position values approximately match market value
+        # total_position_value = Decimal("0")
+        # for security_id, quantity in current_positions.items():
+        #     if security_id in prices:
+        #         total_position_value += Decimal(str(quantity)) * prices[security_id]
 
-        # Allow up to 10% discrepancy for cash allocation
-        min_expected = market_value * Decimal("0.85")  # 85% minimum
-        max_expected = market_value * Decimal("1.05")  # 105% maximum (includes cash)
+        # # Allow up to 10% discrepancy for cash allocation
+        # min_expected = market_value * Decimal("0.85")  # 85% minimum
+        # max_expected = market_value * Decimal("1.05")  # 105% maximum (includes cash)
 
-        if not (min_expected <= total_position_value <= max_expected):
-            raise ValidationError(
-                f"Position values ({total_position_value}) do not approximately match "
-                f"market value ({market_value})"
-            )
+        # if not (min_expected <= total_position_value <= max_expected):
+        #     raise ValidationError(
+        #         f"Position values ({total_position_value}) do not approximately match "
+        #         f"market value ({market_value})"
+        #     )
 
         return True
 

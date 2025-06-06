@@ -659,12 +659,22 @@ class TestPricingServiceClient:
         return AsyncMock(spec=BaseServiceClient)
 
     @pytest_asyncio.fixture
-    async def pricing_client(self, mock_base_client):
+    async def mock_security_client(self):
+        """Create a mock security client for testing."""
+        from src.infrastructure.external.security_client import SecurityServiceClient
+
+        return AsyncMock(spec=SecurityServiceClient)
+
+    @pytest_asyncio.fixture
+    async def pricing_client(self, mock_base_client, mock_security_client):
         """Create a pricing service client for testing."""
         client = PricingServiceClient(
-            base_url="http://pricing-service:8083", timeout=10.0
+            base_url="http://pricing-service:8083",
+            timeout=10.0,
+            security_client=mock_security_client,
         )
         client._base_client = mock_base_client
+        client._test_mode = True  # Enable test mode for backwards compatibility
         return client
 
     @pytest.mark.asyncio

@@ -37,11 +37,24 @@ from src.infrastructure.optimization.cvxpy_solver import CVXPYOptimizationEngine
 
 
 @lru_cache()
-def get_pricing_client() -> PricingServiceClient:
+def get_security_client() -> SecurityServiceClient:
+    """Get Security Service client."""
+    settings = get_settings()
+    return SecurityServiceClient(
+        base_url=settings.security_service_url,
+        timeout=settings.external_service_timeout,
+    )
+
+
+def get_pricing_client(
+    security_client: SecurityServiceClient = Depends(get_security_client),
+) -> PricingServiceClient:
     """Get Pricing Service client."""
     settings = get_settings()
     return PricingServiceClient(
-        base_url=settings.pricing_service_url, timeout=settings.external_service_timeout
+        base_url=settings.pricing_service_url,
+        timeout=settings.external_service_timeout,
+        security_client=security_client,
     )
 
 
@@ -51,16 +64,6 @@ def get_portfolio_client() -> PortfolioClient:
     settings = get_settings()
     return PortfolioClient(
         base_url=settings.portfolio_service_url,
-        timeout=settings.external_service_timeout,
-    )
-
-
-@lru_cache()
-def get_security_client() -> SecurityServiceClient:
-    """Get Security Service client."""
-    settings = get_settings()
-    return SecurityServiceClient(
-        base_url=settings.security_service_url,
         timeout=settings.external_service_timeout,
     )
 

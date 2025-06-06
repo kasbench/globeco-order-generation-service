@@ -97,8 +97,10 @@ class RebalanceService:
             ]
             prices = await self._get_security_prices(security_ids)
 
-            # Calculate current market value
-            market_value = self._calculate_market_value(current_positions, prices)
+            # Calculate current market value (securities + cash)
+            market_value = await self._calculate_market_value(
+                current_positions, prices, portfolio_id
+            )
 
             # Perform optimization
             optimization_result = await self._optimize_portfolio(
@@ -304,18 +306,79 @@ class RebalanceService:
             )
             raise ExternalServiceError("Failed to retrieve security prices")
 
-    def _calculate_market_value(
-        self, positions: Dict[str, int], prices: Dict[str, Decimal]
+    async def _calculate_market_value(
+        self, positions: Dict[str, int], prices: Dict[str, Decimal], portfolio_id: str
     ) -> Decimal:
-        """Calculate total market value of portfolio."""
-        market_value = Decimal('0')
+        """Calculate total market value of portfolio (securities + cash)."""
+        securities_value = Decimal('0')
+        matched_securities = 0
+        missing_prices = []
 
+        logger.debug(
+            "Calculating market value",
+            portfolio_id=portfolio_id,
+            position_keys=list(positions.keys())[:5],  # Show first 5
+            price_keys=list(prices.keys())[:5],  # Show first 5
+            total_positions=len(positions),
+            total_prices=len(prices),
+        )
+
+        # Calculate securities value
         for security_id, quantity in positions.items():
             if security_id in prices:
-                market_value += Decimal(quantity) * prices[security_id]
+                position_value = Decimal(quantity) * prices[security_id]
+                securities_value += position_value
+                matched_securities += 1
+                logger.debug(
+                    "Security matched",
+                    security_id=security_id,
+                    quantity=quantity,
+                    price=float(prices[security_id]),
+                    value=float(position_value),
+                )
+            else:
+                missing_prices.append(security_id)
 
-        logger.debug("Calculated market value", market_value=float(market_value))
-        return market_value
+        if missing_prices:
+            logger.warning(
+                "Missing prices for securities",
+                missing_count=len(missing_prices),
+                missing_securities=missing_prices[:5],  # Show first 5
+            )
+
+        # Get cash balance
+        try:
+            cash_balance = await self._portfolio_accounting_client.get_cash_position(
+                portfolio_id
+            )
+            logger.debug(
+                "Cash position retrieved",
+                portfolio_id=portfolio_id,
+                cash_balance=float(cash_balance),
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to get cash position, assuming zero",
+                portfolio_id=portfolio_id,
+                error=str(e),
+            )
+            cash_balance = Decimal('0')
+
+        # Total market value = securities + cash
+        total_market_value = securities_value + cash_balance
+
+        logger.info(
+            "Market value calculation complete",
+            portfolio_id=portfolio_id,
+            securities_value=float(securities_value),
+            cash_balance=float(cash_balance),
+            total_market_value=float(total_market_value),
+            matched_securities=matched_securities,
+            total_positions=len(positions),
+            missing_prices_count=len(missing_prices),
+        )
+
+        return total_market_value
 
     async def _optimize_portfolio(
         self,
