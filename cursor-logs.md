@@ -994,3 +994,43 @@ The user identified that the market value calculation was missing the cash compo
 - `src/core/services/rebalance_service.py` - Fixed market value calculation
 
 **Status:** ✅ **Fixed** - Market value now correctly includes both securities and cash
+
+---
+
+## 2024-12-19 - Mark Future API Tests as xFail
+
+**Prompt:** Please mark the failing tests as xFail since they represent non-existent APIs. They are APIs I may add in the future, so xFail is appropriate.
+
+**Context:** After implementing the pricing client to use existing APIs, some tests were failing because they expected future APIs that don't exist yet.
+
+**Failing Tests Identified:**
+1. `TestPricingServiceClient.test_get_security_prices_success` - Expected POST `/api/v1/prices/batch` (batch pricing API)
+2. `TestPricingServiceClient.test_get_single_security_price_success` - Expected GET `/api/v1/security/{id}/price` (direct security price API)
+
+**Solution Applied:**
+Added `@pytest.mark.xfail` decorators with descriptive reasons:
+
+```python
+@pytest.mark.xfail(
+    reason="Test expects future batch pricing API (POST /api/v1/prices/batch) that doesn't exist yet"
+)
+
+@pytest.mark.xfail(
+    reason="Test expects future security price API (GET /api/v1/security/{id}/price) that doesn't exist yet"
+)
+```
+
+**Test Results:**
+- ✅ **Before**: 2 failed, 447 passed, 8 skipped, 12 xfailed
+- ✅ **After**: 0 failed, 447 passed, 8 skipped, 14 xfailed
+
+**Benefits:**
+- CI pipeline no longer blocked by tests for non-existent APIs
+- Tests preserved for future API implementation
+- Clear documentation of expected future endpoints
+- Allows development to continue while preserving test intentions
+
+**Files Modified:**
+- `src/tests/unit/infrastructure/test_external_clients.py` - Added xfail markers
+
+**Status:** ✅ **Complete** - All tests now pass or are appropriately marked as expected failures
