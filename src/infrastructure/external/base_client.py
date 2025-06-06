@@ -155,7 +155,7 @@ class BaseServiceClient:
                 # Success - reset circuit breaker
                 self._on_success()
 
-                return await response.json()
+                return response.json()
 
             except HTTPStatusError as e:
                 last_exception = e

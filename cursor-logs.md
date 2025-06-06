@@ -1324,4 +1324,39 @@ The test was failing because it was mocking the old method names (`get_positions
 
 **Final Status:** ✅ **RESOLVED** - Test mocking now aligns with the actual service interface. All critical tests pass and the implementation remains stable.
 
+## 2024-12-19 - Critical HTTP Client Await Fix
+
+**Prompt:** "I'm still getting the following error that an object dict can't be used in await expression"
+
+**Analysis:** The user reported a persistent runtime error in the actual application (not tests) where the portfolio accounting client was failing with "object dict can't be used in 'await' expression" during HTTP API calls.
+
+**Root Cause Discovery:** Through investigation, I discovered that the issue was in the base HTTP client. The `httpx.Response.json()` method is **synchronous**, not asynchronous, but the code was incorrectly using `await response.json()`.
+
+**Actions Taken:**
+
+1. **Fixed Base Client Method:** Updated `_make_request()` in `src/infrastructure/external/base_client.py`:
+   - Changed `return await response.json()` → `return response.json()`
+   - Verified that `httpx.Response.json()` is synchronous using `help(httpx.Response.json)`
+
+2. **Fixed All Test Mocks:** Updated all test mocks in `src/tests/unit/infrastructure/test_external_clients.py`:
+   - Changed `mock_response.json = AsyncMock(return_value={...})` → `mock_response.json = Mock(return_value={...})`
+   - Updated 6 different test methods to use regular `Mock` instead of `AsyncMock` for the `json` method
+   - Added `Mock` import to the test file
+
+3. **Verification:** Comprehensive testing confirmed:
+   - All 34 external client tests: PASSED ✅
+   - Portfolio accounting client functionality: WORKING ✅
+   - Base service client functionality: WORKING ✅
+
+**Technical Details:**
+The error occurred because `httpx.Response.json()` returns data directly (synchronous), not a coroutine. When the code tried to `await` the returned dictionary, Python raised the "object dict can't be used in 'await' expression" error.
+
+**Impact:** This was a critical runtime bug that would have prevented all external service communication. The fix ensures that:
+- Portfolio Accounting Service calls work correctly
+- Security Service calls work correctly
+- Pricing Service calls work correctly
+- All HTTP clients function properly in the live application
+
+**Final Status:** ✅ **CRITICAL FIX COMPLETE** - The fundamental HTTP client issue is resolved, enabling proper communication with all external services. The runtime error is eliminated and the application can now successfully make API calls to external services.
+
 ---

@@ -11,7 +11,7 @@ This module tests the external service integration layer, including:
 
 import asyncio
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -61,7 +61,7 @@ class TestBaseServiceClient:
         # Arrange
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"status": "success", "data": []})
+        mock_response.json = Mock(return_value={"status": "success", "data": []})
         mock_client.get.return_value = mock_response
 
         # Act
@@ -77,7 +77,7 @@ class TestBaseServiceClient:
         # Arrange - First two calls timeout, third succeeds
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"data": "success"})
+        mock_response.json = Mock(return_value={"data": "success"})
 
         mock_client.get.side_effect = [
             TimeoutException("Connection timeout"),
@@ -104,7 +104,7 @@ class TestBaseServiceClient:
 
         mock_success_response = AsyncMock()
         mock_success_response.status_code = 200
-        mock_success_response.json = AsyncMock(return_value={"data": "recovered"})
+        mock_success_response.json = Mock(return_value={"data": "recovered"})
 
         mock_client.get.side_effect = [error, mock_success_response]
 
@@ -179,7 +179,7 @@ class TestBaseServiceClient:
         # Mock successful response for recovery
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"status": "recovered"})
+        mock_response.json = Mock(return_value={"status": "recovered"})
         mock_client.get.return_value = mock_response
 
         # Act
@@ -220,7 +220,7 @@ class TestBaseServiceClient:
         # Arrange
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"status": "healthy"}
+        mock_response.json = Mock(return_value={"status": "healthy"})
         mock_client.get.return_value = mock_response
 
         # Act
@@ -946,7 +946,7 @@ class TestCircuitBreakerStates:
         mock_client = AsyncMock(spec=AsyncClient)
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"status": "success"})
+        mock_response.json = Mock(return_value={"status": "success"})
         mock_client.get.return_value = mock_response
         client_with_fast_timeout._client = mock_client
 
