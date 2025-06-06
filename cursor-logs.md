@@ -1271,4 +1271,57 @@ The document now provides sufficient detail for implementation without requiring
 
 The implementation successfully addresses all requirements from the supplemental documentation with proper error handling, caching, and financial precision.
 
+## 2024-12-19 - Fix Await Error in Portfolio Accounting Client
+
+**Prompt:** Error: "Failed to retrieve portfolio summary: object dict can't be used in 'await' expression"
+
+**Analysis:** The user reported a runtime error where a dictionary was being awaited instead of a coroutine. The error was occurring in the rebalance service when trying to get current positions from the portfolio accounting client.
+
+**Root Cause:** The rebalance service was using the legacy `get_portfolio_balances()` method and incorrectly processing the returned data:
+1. `get_portfolio_balances()` returns a list of dictionaries, not objects with attributes
+2. The code was trying to access `balance.quantity` and `balance.security_id` as object attributes instead of dictionary keys
+3. This was causing the error when the rebalance service processed the portfolio data
+
+**Actions Taken:**
+
+1. **Updated Rebalance Service Method:** Modified `_get_current_positions()` in `src/core/services/rebalance_service.py`:
+   - Replaced legacy `get_portfolio_balances()` call with `get_portfolio_positions()`
+   - Simplified the logic since `get_portfolio_positions()` returns `Dict[str, int]` directly
+   - Removed the complex dictionary processing loop
+
+2. **Verification:** Tested the fixes:
+   - Portfolio accounting client tests: All passing ✅
+   - Portfolio positions retrieval: Working correctly ✅
+   - Rebalance service business flow test: Original await error resolved ✅
+
+**Technical Details:**
+- **Before**: `balances = await client.get_portfolio_balances()` → Process dictionaries with `.quantity` attributes
+- **After**: `positions = await client.get_portfolio_positions()` → Direct `Dict[str, int]` return
+
+**Final Status:** ✅ **RESOLVED** - The "object dict can't be used in 'await' expression" error is fixed. The rebalance service now correctly uses the new portfolio positions API without attempting to await dictionaries. The supplemental requirement implementation continues to work as expected.
+
+## 2024-12-19 - Test Method Mocking Fix
+
+**Prompt:** "Please see the attached test failure"
+
+**Analysis:** User reported a test failure showing `TypeError: 'coroutine' object is not iterable` in the rebalance service business flows test.
+
+**Root Cause:** The test was still using outdated mock method names that didn't match the updated portfolio accounting client interface after the supplemental requirement implementation.
+
+**Actions Taken:**
+
+1. **Fixed Test Mock Configuration:** Updated `test_optimization_failure_handling` in `src/tests/unit/core/test_rebalance_service_business_flows.py`:
+   - Changed `mock_portfolio_client.get_positions.return_value` → `mock_portfolio_client.get_portfolio_positions.return_value`
+   - Changed `mock_pricing_client.get_prices.return_value` → `mock_pricing_client.get_security_prices.return_value`
+
+2. **Verification:** Test results confirmed:
+   - `test_optimization_failure_handling`: PASSED ✅
+   - All rebalance service business flow tests: 3 passed, 5 xfailed (as expected) ✅
+   - No new test failures introduced ✅
+
+**Technical Details:**
+The test was failing because it was mocking the old method names (`get_positions`, `get_prices`) instead of the new method names (`get_portfolio_positions`, `get_security_prices`) introduced during the supplemental requirement implementation.
+
+**Final Status:** ✅ **RESOLVED** - Test mocking now aligns with the actual service interface. All critical tests pass and the implementation remains stable.
+
 ---

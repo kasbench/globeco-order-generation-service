@@ -262,17 +262,10 @@ class RebalanceService:
         try:
             logger.debug("Fetching current positions", portfolio_id=portfolio_id)
 
-            balances = await self._portfolio_accounting_client.get_portfolio_balances(
+            # Use the new get_portfolio_positions method which returns Dict[str, int] directly
+            positions = await self._portfolio_accounting_client.get_portfolio_positions(
                 portfolio_id
             )
-
-            # Convert balances to position quantities
-            positions = {}
-            for balance in balances:
-                if (
-                    balance.quantity > 0
-                ):  # Only include positions with positive quantities
-                    positions[balance.security_id] = balance.quantity
 
             logger.debug(
                 "Retrieved current positions",

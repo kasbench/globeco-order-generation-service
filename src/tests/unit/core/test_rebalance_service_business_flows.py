@@ -254,8 +254,8 @@ class TestRebalanceServiceBusinessFlows:
         prices = {"TECH123456789012345678AB": Decimal("100.00")}
 
         mock_model_repository.list_all.return_value = [sample_investment_model]
-        mock_portfolio_client.get_positions.return_value = current_positions
-        mock_pricing_client.get_prices.return_value = prices
+        mock_portfolio_client.get_portfolio_positions.return_value = current_positions
+        mock_pricing_client.get_security_prices.return_value = prices
         mock_optimization_engine.optimize_portfolio.side_effect = OptimizationError(
             "Constraints are infeasible"
         )
