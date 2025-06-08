@@ -249,6 +249,7 @@ class MongoModelRepository(ModelRepository):
             offset: Number of models to skip (0-based). If None, start from beginning.
             limit: Maximum number of models to return. If None, return all from offset.
             sort_by: List of fields to sort by. Valid fields: model_id, name, last_rebalance_date.
+                    Fields can be prefixed with + (ascending) or - (descending). Default is ascending.
                     If None or empty, no sorting is applied.
 
         Returns:
@@ -271,22 +272,42 @@ class MongoModelRepository(ModelRepository):
                 "last_rebalance_date": "last_rebalance_date",
             }
 
-            # Validate and build sort criteria
+            # Parse sort criteria with direction support
             sort_criteria = []
             if sort_by:
-                for field in sort_by:
-                    if field not in valid_sort_fields:
+                for field_spec in sort_by:
+                    # Parse direction prefix
+                    direction = 1  # Default to ascending
+                    field_name = field_spec
+
+                    if field_spec.startswith('+'):
+                        direction = 1  # Ascending
+                        field_name = field_spec[1:]
+                    elif field_spec.startswith('-'):
+                        direction = -1  # Descending
+                        field_name = field_spec[1:]
+
+                    # Validate field name
+                    if field_name not in valid_sort_fields:
+                        valid_fields_with_prefixes = []
+                        for field in valid_sort_fields.keys():
+                            valid_fields_with_prefixes.extend(
+                                [field, f"+{field}", f"-{field}"]
+                            )
                         raise ValueError(
-                            f"Invalid sort field: {field}. Valid fields are: {', '.join(valid_sort_fields.keys())}"
+                            f"Invalid sort field: {field_spec}. Valid fields are: {', '.join(valid_fields_with_prefixes)}"
                         )
-                    sort_criteria.append(valid_sort_fields[field])
+
+                    # Add to sort criteria as tuple (field, direction)
+                    mongo_field = valid_sort_fields[field_name]
+                    sort_criteria.append((mongo_field, direction))
 
             # Build query
             query = ModelDocument.find_all()
 
             # Apply sorting if specified
             if sort_criteria:
-                # MongoDB sort with multiple fields
+                # MongoDB sort with multiple fields and directions
                 query = query.sort(sort_criteria)
 
             # Apply pagination

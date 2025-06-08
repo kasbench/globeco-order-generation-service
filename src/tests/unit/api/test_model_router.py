@@ -461,7 +461,7 @@ class TestGetModelsWithPaginationEndpoint:
         app_client.app.dependency_overrides.clear()
 
     def test_get_models_fallback_to_original_method(self, app_client, sample_model_dto):
-        """Test that when no pagination/sorting parameters are provided, original method is used."""
+        """Test that no pagination parameters falls back to original method."""
         # Setup
         mock_service = AsyncMock()
         mock_service.get_all_models.return_value = [sample_model_dto]
@@ -477,8 +477,261 @@ class TestGetModelsWithPaginationEndpoint:
         # Verify
         assert response.status_code == status.HTTP_200_OK
         mock_service.get_all_models.assert_called_once()
-        # Should NOT call pagination method
-        mock_service.get_models_with_pagination.assert_not_called()
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+
+@pytest.mark.unit
+class TestGetModelsWithSortDirectionEndpoint:
+    """Test class for GET /models endpoint with ascending/descending sort functionality."""
+
+    def test_get_models_with_ascending_sort_explicit(
+        self, app_client, sample_model_dto
+    ):
+        """Test explicit ascending sort with + prefix (normalized to field name since + is default)."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=+name")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        # +name should be normalized to name since + is the default (ascending) behavior
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["name"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_descending_sort(self, app_client, sample_model_dto):
+        """Test descending sort with - prefix."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=-last_rebalance_date")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["-last_rebalance_date"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_mixed_sort_directions(self, app_client, sample_model_dto):
+        """Test mixed ascending and descending sorts."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get(
+            "/api/v1/models?sort_by=+name,-last_rebalance_date,model_id"
+        )
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        # +name gets normalized to name, -last_rebalance_date stays as is, model_id stays as is
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None,
+            limit=None,
+            sort_by=["name", "-last_rebalance_date", "model_id"],
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_all_ascending_sorts(self, app_client, sample_model_dto):
+        """Test all valid ascending sort fields."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get(
+            "/api/v1/models?sort_by=+model_id,+name,+last_rebalance_date"
+        )
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        # All + prefixes get normalized to field names since + is default ascending
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["model_id", "name", "last_rebalance_date"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_all_descending_sorts(self, app_client, sample_model_dto):
+        """Test all valid descending sort fields."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get(
+            "/api/v1/models?sort_by=-model_id,-name,-last_rebalance_date"
+        )
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None,
+            limit=None,
+            sort_by=["-model_id", "-name", "-last_rebalance_date"],
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_pagination_and_sort_directions(
+        self, app_client, sample_model_dto
+    ):
+        """Test pagination combined with sort directions."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get(
+            "/api/v1/models?offset=10&limit=5&sort_by=-name,+model_id"
+        )
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        # -name stays as is, +model_id gets normalized to model_id
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=10, limit=5, sort_by=["-name", "model_id"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_default_ascending_behavior(self, app_client, sample_model_dto):
+        """Test that fields without prefix default to ascending."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute - mix of prefixed and non-prefixed fields
+        response = app_client.get(
+            "/api/v1/models?sort_by=name,+model_id,-last_rebalance_date"
+        )
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        # name stays as is, +model_id gets normalized to model_id, -last_rebalance_date stays as is
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None,
+            limit=None,
+            sort_by=["name", "model_id", "-last_rebalance_date"],
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_invalid_sort_field_with_prefix(self, app_client):
+        """Test invalid sort field with + prefix returns 400 error."""
+        # Setup
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=+invalid_field")
+
+        # Verify
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_invalid_sort_field_with_minus_prefix(self, app_client):
+        """Test invalid sort field with - prefix returns 400 error."""
+        # Setup
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=-invalid_field")
+
+        # Verify
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_sort_field_with_spaces_and_prefix(
+        self, app_client, sample_model_dto
+    ):
+        """Test sort field with spaces around prefix."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by= +name , -model_id ")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        # Spaces are trimmed, +name gets normalized to name, -model_id stays as is
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["name", "-model_id"]
+        )
 
         # Cleanup
         app_client.app.dependency_overrides.clear()

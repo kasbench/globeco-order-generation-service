@@ -65,7 +65,7 @@ async def get_all_models(
     ),
     sort_by: Optional[str] = Query(
         None,
-        description="Comma-separated list of fields to sort by (model_id, name, last_rebalance_date)",
+        description="Comma-separated list of fields to sort by. Fields: model_id, name, last_rebalance_date. Prefix with + (ascending) or - (descending). Default is ascending.",
     ),
 ) -> List[ModelDTO]:
     """Get all investment models with optional pagination and sorting."""
@@ -76,6 +76,35 @@ async def get_all_models(
             sort_fields = [
                 field.strip() for field in sort_by.split(",") if field.strip()
             ]
+
+            # Validate sort fields early at API level
+            valid_sort_fields = {"model_id", "name", "last_rebalance_date"}
+            normalized_sort_fields = []
+
+            for field_spec in sort_fields:
+                # Parse direction prefix to get the actual field name
+                field_name = field_spec
+                if field_spec.startswith(('+', '-')):
+                    field_name = field_spec[1:]
+
+                if field_name not in valid_sort_fields:
+                    valid_fields_with_prefixes = []
+                    for field in valid_sort_fields:
+                        valid_fields_with_prefixes.extend(
+                            [field, f"+{field}", f"-{field}"]
+                        )
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid sort field: {field_spec}. Valid fields are: {', '.join(valid_fields_with_prefixes)}",
+                    )
+
+                # Normalize + prefix to field name (since + is default ascending)
+                if field_spec.startswith('+'):
+                    normalized_sort_fields.append(field_name)
+                else:
+                    normalized_sort_fields.append(field_spec)
+
+            sort_fields = normalized_sort_fields
 
         # Validate offset and limit logic according to requirements
         if offset is not None and offset < 0:
