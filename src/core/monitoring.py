@@ -372,14 +372,22 @@ def setup_monitoring(app) -> Instrumentator:
     Returns:
         Configured Instrumentator instance
     """
+    from src.config import get_settings
+
+    settings = get_settings()
+
+    # Check if metrics are enabled
+    if not settings.enable_metrics:
+        logger.info("Metrics disabled, skipping monitoring setup")
+        return None
+
     # Create instrumentator
     instrumentator = Instrumentator(
         should_group_status_codes=False,
         should_ignore_untemplated=True,
-        should_respect_env_var=True,
+        should_respect_env_var=False,  # Use settings instead of env var
         should_instrument_requests_inprogress=True,
         excluded_handlers=["/metrics", "/health", "/health/live", "/health/ready"],
-        env_var_name="ENABLE_METRICS",
         inprogress_name="http_requests_inprogress",
         inprogress_labels=True,
     )

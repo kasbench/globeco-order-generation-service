@@ -71,6 +71,48 @@ class ModelService:
             logger.error(f"Failed to retrieve models: {str(e)}")
             raise ServiceException(f"Failed to retrieve models: {str(e)}") from e
 
+    async def get_models_with_pagination(
+        self,
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
+        sort_by: Optional[List[str]] = None,
+    ) -> List[ModelDTO]:
+        """
+        Retrieve investment models with pagination and sorting.
+
+        Args:
+            offset: Number of models to skip (0-based). If None, start from beginning.
+            limit: Maximum number of models to return. If None, return all from offset.
+            sort_by: List of fields to sort by. Valid fields: model_id, name, last_rebalance_date.
+                    If None or empty, no sorting is applied.
+
+        Returns:
+            List[ModelDTO]: List of models as DTOs
+
+        Raises:
+            ValidationError: If pagination parameters are invalid
+            ServiceException: If retrieval fails
+        """
+        try:
+            logger.info(
+                "Retrieving models with pagination",
+                offset=offset,
+                limit=limit,
+                sort_by=sort_by,
+            )
+            models = await self._model_repository.list_with_pagination(
+                offset=offset, limit=limit, sort_by=sort_by
+            )
+            return [self._model_mapper.to_dto(model) for model in models]
+        except ValueError as e:
+            logger.warning("Invalid pagination parameters", error=str(e))
+            raise ValidationError(f"Invalid pagination parameters: {str(e)}") from e
+        except Exception as e:
+            logger.error(f"Failed to retrieve models with pagination: {str(e)}")
+            raise ServiceException(
+                f"Failed to retrieve models with pagination: {str(e)}"
+            ) from e
+
     async def get_model_by_id(self, model_id: str) -> ModelDTO:
         """Retrieve a specific model by ID.
 

@@ -17,6 +17,7 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from prometheus_client import REGISTRY, CollectorRegistry
 from testcontainers.mongodb import MongoDbContainer
 
 from src.config import Settings, get_settings
@@ -32,6 +33,31 @@ class TestSettings(Settings):
     log_level: str = "DEBUG"
     optimization_timeout: int = 5  # Shorter timeout for tests
     external_service_timeout: int = 1  # Shorter timeout for tests
+    enable_metrics: bool = False  # Disable Prometheus metrics during testing
+
+
+@pytest.fixture(autouse=True)
+def prometheus_registry_cleanup():
+    """Clean up Prometheus registry before each test to prevent duplicated metrics."""
+    # Clear the default registry before each test
+    collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except KeyError:
+            # Already unregistered, ignore
+            pass
+
+    yield
+
+    # Clean up after test as well
+    collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except KeyError:
+            # Already unregistered, ignore
+            pass
 
 
 @pytest.fixture(scope="session")

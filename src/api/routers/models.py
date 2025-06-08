@@ -16,10 +16,10 @@ All endpoints include proper error handling, validation, and status codes.
 """
 
 import re
-from typing import List
+from typing import List, Optional
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import ValidationError
 
 from src.api.dependencies import get_model_service
@@ -57,10 +57,55 @@ def validate_model_id(
 @router.get("/models", response_model=List[ModelDTO], status_code=status.HTTP_200_OK)
 async def get_all_models(
     model_service: ModelService = Depends(get_model_service),
+    offset: Optional[int] = Query(
+        None, description="Number of models to skip (0-based)"
+    ),
+    limit: Optional[int] = Query(
+        None, description="Maximum number of models to return"
+    ),
+    sort_by: Optional[str] = Query(
+        None,
+        description="Comma-separated list of fields to sort by (model_id, name, last_rebalance_date)",
+    ),
 ) -> List[ModelDTO]:
-    """Get all investment models."""
+    """Get all investment models with optional pagination and sorting."""
     try:
-        return await model_service.get_all_models()
+        # Parse sort_by parameter
+        sort_fields = None
+        if sort_by:
+            sort_fields = [
+                field.strip() for field in sort_by.split(",") if field.strip()
+            ]
+
+        # Validate offset and limit logic according to requirements
+        if offset is not None and offset < 0:
+            logger.warning("Invalid offset parameter", offset=offset)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Offset must be a non-negative integer",
+            )
+
+        if limit is not None and limit < 0:
+            logger.warning("Invalid limit parameter", limit=limit)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Limit must be a non-negative integer",
+            )
+
+        # If neither parameter is specified, use original method
+        if offset is None and limit is None and sort_fields is None:
+            return await model_service.get_all_models()
+
+        # Use pagination method
+        return await model_service.get_models_with_pagination(
+            offset=offset, limit=limit, sort_by=sort_fields
+        )
+    except HTTPException:
+        # Re-raise HTTPExceptions without modification
+        raise
+    except DomainValidationError as e:
+        logger.warning("Validation error in get models", error=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error("Failed to retrieve all models", error=str(e))
         raise HTTPException(

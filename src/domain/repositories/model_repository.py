@@ -7,6 +7,7 @@ extending the base repository with model-specific operations.
 
 from abc import abstractmethod
 from datetime import datetime
+from typing import List, Optional
 
 from src.domain.entities.model import InvestmentModel
 from src.domain.repositories.base_repository import BaseRepository
@@ -124,5 +125,39 @@ class ModelRepository(BaseRepository[InvestmentModel]):
 
         Raises:
             ValidationError: If model_id format is invalid
+        """
+        pass
+
+    @abstractmethod
+    async def list_with_pagination(
+        self,
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
+        sort_by: Optional[List[str]] = None,
+    ) -> List[InvestmentModel]:
+        """
+        List models with pagination and sorting support.
+
+        Args:
+            offset: Number of models to skip (0-based). If None, start from beginning.
+            limit: Maximum number of models to return. If None, return all from offset.
+            sort_by: List of fields to sort by. Valid fields: model_id, name, last_rebalance_date.
+                    If None or empty, no sorting is applied.
+
+        Returns:
+            List of models matching the pagination and sorting criteria
+
+        Raises:
+            ValueError: If offset or limit are negative, or if sort_by contains invalid fields
+        """
+        pass
+
+    @abstractmethod
+    async def count_all(self) -> int:
+        """
+        Get the total number of models.
+
+        Returns:
+            Total count of models
         """
         pass

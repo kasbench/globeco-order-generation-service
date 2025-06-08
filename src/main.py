@@ -186,12 +186,16 @@ def create_app() -> FastAPI:
     )
 
     # Add custom middleware
-    app.add_middleware(MetricsMiddleware)
+    if settings.enable_metrics:
+        app.add_middleware(MetricsMiddleware)
     app.middleware("http")(correlation_middleware)
     app.middleware("http")(security_headers_middleware)
 
     # Setup monitoring and observability
-    setup_monitoring(app)
+    if settings.enable_metrics:
+        instrumentator = setup_monitoring(app)
+        if instrumentator is None:
+            logger.warning("Monitoring setup returned None despite enable_metrics=True")
 
     # Add routers
     app.include_router(health_router, prefix="/health", tags=["health"])

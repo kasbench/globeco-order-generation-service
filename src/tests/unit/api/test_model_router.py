@@ -159,6 +159,332 @@ class TestGetModelsEndpoint:
 
 
 @pytest.mark.unit
+class TestGetModelsWithPaginationEndpoint:
+    """Test GET /models endpoint with pagination and sorting."""
+
+    def test_get_models_with_pagination_offset_only(self, app_client, sample_model_dto):
+        """Test pagination with offset only."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?offset=5")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=5, limit=None, sort_by=None
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_pagination_limit_only(self, app_client, sample_model_dto):
+        """Test pagination with limit only."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?limit=10")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=10, sort_by=None
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_pagination_offset_and_limit(
+        self, app_client, sample_model_dto
+    ):
+        """Test pagination with both offset and limit."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?offset=5&limit=10")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=5, limit=10, sort_by=None
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_sorting_single_field(self, app_client, sample_model_dto):
+        """Test sorting by single field."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=name")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["name"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_sorting_multiple_fields(
+        self, app_client, sample_model_dto
+    ):
+        """Test sorting by multiple fields."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=name,last_rebalance_date")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["name", "last_rebalance_date"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_with_pagination_and_sorting(self, app_client, sample_model_dto):
+        """Test pagination with sorting."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get(
+            "/api/v1/models?offset=5&limit=10&sort_by=model_id,name"
+        )
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=5, limit=10, sort_by=["model_id", "name"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_offset_greater_than_count_fallback(self, app_client):
+        """Test offset greater than number of rows returns empty list."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = []
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?offset=1000")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == []
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_negative_offset_error(self, app_client):
+        """Test negative offset returns 400 error."""
+        # Setup
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?offset=-1")
+
+        # Verify
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        response_data = response.json()
+        assert "Offset must be a non-negative integer" in response_data["detail"]
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_negative_limit_error(self, app_client):
+        """Test negative limit returns 400 error."""
+        # Setup
+        mock_service = AsyncMock()
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?limit=-1")
+
+        # Verify
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        response_data = response.json()
+        assert "Limit must be a non-negative integer" in response_data["detail"]
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_invalid_sort_field_error(self, app_client):
+        """Test invalid sort field returns 400 error."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.side_effect = DomainValidationError(
+            "Invalid sort field: invalid_field. Valid fields are: model_id, name, last_rebalance_date"
+        )
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=invalid_field")
+
+        # Verify
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        response_data = response.json()
+        assert "Invalid sort field" in response_data["detail"]
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_empty_sort_by_ignored(self, app_client, sample_model_dto):
+        """Test empty sort_by parameter falls back to original method."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_all_models.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_all_models.assert_called_once()
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_sort_by_with_spaces(self, app_client, sample_model_dto):
+        """Test sort_by parameter handles spaces correctly."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?sort_by=name, last_rebalance_date")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=None, limit=None, sort_by=["name", "last_rebalance_date"]
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_zero_offset_and_limit(self, app_client, sample_model_dto):
+        """Test zero offset and limit are valid."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_models_with_pagination.return_value = []
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models?offset=0&limit=0")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_models_with_pagination.assert_called_once_with(
+            offset=0, limit=0, sort_by=None
+        )
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+    def test_get_models_fallback_to_original_method(self, app_client, sample_model_dto):
+        """Test that when no pagination/sorting parameters are provided, original method is used."""
+        # Setup
+        mock_service = AsyncMock()
+        mock_service.get_all_models.return_value = [sample_model_dto]
+
+        # Override the dependency
+        from src.api.routers.models import get_model_service
+
+        app_client.app.dependency_overrides[get_model_service] = lambda: mock_service
+
+        # Execute
+        response = app_client.get("/api/v1/models")
+
+        # Verify
+        assert response.status_code == status.HTTP_200_OK
+        mock_service.get_all_models.assert_called_once()
+        # Should NOT call pagination method
+        mock_service.get_models_with_pagination.assert_not_called()
+
+        # Cleanup
+        app_client.app.dependency_overrides.clear()
+
+
+@pytest.mark.unit
 class TestGetModelByIdEndpoint:
     """Test GET /model/{model_id} endpoint."""
 

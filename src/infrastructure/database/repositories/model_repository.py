@@ -236,6 +236,92 @@ class MongoModelRepository(ModelRepository):
             logger.error(error_msg)
             raise RepositoryError(error_msg, operation="list_all") from e
 
+    async def list_with_pagination(
+        self,
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
+        sort_by: Optional[List[str]] = None,
+    ) -> List[InvestmentModel]:
+        """
+        List models with pagination and sorting support.
+
+        Args:
+            offset: Number of models to skip (0-based). If None, start from beginning.
+            limit: Maximum number of models to return. If None, return all from offset.
+            sort_by: List of fields to sort by. Valid fields: model_id, name, last_rebalance_date.
+                    If None or empty, no sorting is applied.
+
+        Returns:
+            List of models matching the pagination and sorting criteria
+
+        Raises:
+            ValueError: If offset or limit are negative, or if sort_by contains invalid fields
+        """
+        try:
+            # Validate parameters
+            if offset is not None and offset < 0:
+                raise ValueError("Offset must be non-negative")
+            if limit is not None and limit < 0:
+                raise ValueError("Limit must be non-negative")
+
+            # Valid sort fields mapping from API field names to MongoDB field names
+            valid_sort_fields = {
+                "model_id": "_id",
+                "name": "name",
+                "last_rebalance_date": "last_rebalance_date",
+            }
+
+            # Validate and build sort criteria
+            sort_criteria = []
+            if sort_by:
+                for field in sort_by:
+                    if field not in valid_sort_fields:
+                        raise ValueError(
+                            f"Invalid sort field: {field}. Valid fields are: {', '.join(valid_sort_fields.keys())}"
+                        )
+                    sort_criteria.append(valid_sort_fields[field])
+
+            # Build query
+            query = ModelDocument.find_all()
+
+            # Apply sorting if specified
+            if sort_criteria:
+                # MongoDB sort with multiple fields
+                query = query.sort(sort_criteria)
+
+            # Apply pagination
+            if offset is not None:
+                query = query.skip(offset)
+            if limit is not None:
+                query = query.limit(limit)
+
+            # Execute query
+            documents = await query.to_list()
+
+            # Convert to domain models
+            return [doc.to_domain_model() for doc in documents]
+
+        except ValueError:
+            raise  # Re-raise validation errors
+        except Exception as e:
+            error_msg = f"Failed to list models with pagination: {str(e)}"
+            logger.error(error_msg)
+            raise RepositoryError(error_msg, operation="list_with_pagination") from e
+
+    async def count_all(self) -> int:
+        """
+        Get the total number of models.
+
+        Returns:
+            Total count of models
+        """
+        try:
+            return await ModelDocument.count()
+        except Exception as e:
+            error_msg = f"Failed to count models: {str(e)}"
+            logger.error(error_msg)
+            raise RepositoryError(error_msg, operation="count_all") from e
+
     async def exists_by_name(self, name: str) -> bool:
         """
         Check if a model with the given name exists.
