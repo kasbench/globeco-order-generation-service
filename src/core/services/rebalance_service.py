@@ -716,7 +716,7 @@ class RebalanceService:
                     if data['market_value'] > 0
                     else Decimal('0')
                 )
-                actual_drift = (1 - (actual / target)) if target > 0 else Decimal('0')
+                actual_drift = ((actual / target) - 1) if target > 0 else Decimal('0')
 
                 # Determine transaction info
                 qty_delta = int(adjusted_qty - original_qty)

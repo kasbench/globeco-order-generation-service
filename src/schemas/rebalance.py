@@ -32,7 +32,7 @@ class RebalancePositionDTO(BaseModel):
     high_drift: Decimal = Field(..., description="High drift from the model")
     low_drift: Decimal = Field(..., description="Low drift from the model")
     actual: Decimal = Field(..., description="(u' * p) / MV")
-    actual_drift: Decimal = Field(..., description="1 - (actual/target)")
+    actual_drift: Decimal = Field(..., description="(actual/target) - 1")
     transaction_type: Optional[str] = Field(
         None, description="'BUY' or 'SELL' or None if no transaction"
     )
