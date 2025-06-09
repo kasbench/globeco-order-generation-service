@@ -42,7 +42,7 @@ We are going to make three changes
 |  | rebalanceId | ObjectId | Unique MongoDB assigned primary key |
 | modelId | modelId | ObjectId | Required ID of the model that was rebalanced |
 | rebalanceDate | rebalanceDate | Date | Date of the rebalance (current date)
-| modelName | modelName | String| Name of the model that was rebalanced
+| modelName | modelName | String| Name of the model that was rebalanced.  This can be cached or queried from the models collection.
 | numberOfPortfolios | numberOfPortfolios | Integer| Number of portfolios in the rebalance
 | portfolios | portfolios | [Portfolio] | List of portfolios rebalanced.  See below for the Portfolio Schema
 | version | version | Int32 | default 1. For optimistic concurrency |
@@ -53,9 +53,10 @@ We are going to make three changes
 | Database Field | API Field | Data Type | Description|
 | --- | --- | --- | --- |
 | portfolioId | portfolioId | String | Required ID of the portfolio that was rebalanced
-| portfolioName | portfolioName | String | Name of the portfolio that was rebalanced
 | marketValue | marketValue | Decimal128 | Market Value of the Portfolio |
-| positions | positions | [Position] | List of positions in the portfolio.  Positions includes the union of the positions in the portfolio prior to the rebalance and the positions in the portfolio after the rebalance.  See the Position Schema below |
+| cashBeforeRebalance | cashBeforeRebalance | Decimal128 | The cash in the portfolio before the rebalance started |
+| cashAfterRebalance | cashAfterRebalance | Decimal128 | The cash in the portfolio as a result of the rebalance.
+| positions | positions | [Position] | List of positions in the portfolio.  Positions includes the union of the positions in the portfolio prior to the rebalance and the positions in the portfolio after the rebalance.  This union is the equivalent of step 3 of section ### Processing Steps in [business-reqirements.md](business-requirements. md).  Start by taking all the securityIds in the portfolio before the rebalance.  Then join them with all the securityIds in the portfolio after the rebalance, removing duplicates.  There should be a position for every security in this combined list.  Some may have a target of 0.  Those are securities that were in the portfolio but are not in the model, and hence sold.  There may also be securities that were not in the model and now have an actual and target.  The  See the Position Schema below |
 ---
 
 ### **Position Schema**
@@ -115,4 +116,14 @@ There is only two changes to RebalanceDTO:
 | GET | rebalances | - | List of Rebalance Schema as a DTO | Get all rebalances.  Implement paging with query parameters offset and limit.
 | GET | rebalance/{id}  | - | Rebalance Schema as DTO |  Get a specific rebalance
 | POST | rebalances/portfolios | {"portfolios":[]} | List of Rebalance Schema as a DTO | Pass a list of portfolios in the Request DTO, as shown, and receive the rebalances for the portfolios.  Implement paging with query parameters offset and limit |
-| DELETE | rebalance/{id} | Delete the specified rebalance record.  Field version passed as a query parameter.
+| DELETE |  rebalance/{id} | - | - | Delete the specified rebalance record.  Field version passed as a query parameter.
+
+- default offset is 0, if not specified
+- default limit is 10, if not specified.  Maximum is 100.
+
+- Error response formats should be consistent with the rest of the application
+- No authentication is required
+- We will address performance requirements in a later phase
+
+- Adjust all tests, as required
+- Update README.md
