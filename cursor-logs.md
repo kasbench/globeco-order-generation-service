@@ -1628,3 +1628,54 @@ portfolio_id: str = Field(
 5. **Mathematical Accuracy** - CVXPY optimization algorithms validated
 
 The test suite now provides comprehensive coverage for the portfolio rebalancing service with robust validation, proper error handling, and full integration testing.
+
+---
+
+## Production Issue Fix - Empty rebalance_id Validation Error
+
+**Date:** 2025-06-09
+**Issue:** Production API failing with `Invalid ObjectId format` error for empty `rebalance_id` values
+
+**Error Log Analysis:**
+```
+{"error": "1 validation error for RebalanceDTO\nrebalance_id\n  Value error, Invalid ObjectId format [type=value_error, input_value='', input_type=str]"}
+```
+
+**Root Cause:**
+Two locations in `RebalanceService` were creating `RebalanceDTO` objects with empty strings for `rebalance_id`:
+1. `rebalance_model_portfolios()` method - for failed portfolio scenarios
+2. `_rebalance_portfolio_internal()` method - for temporary DTO creation
+
+The Pydantic validation in `RebalanceDTO.rebalance_id` field requires valid ObjectId format, and empty strings fail this validation.
+
+**Fix Applied:**
+```python
+# Before (failing)
+rebalance_id="",  # Will be set later
+
+# After (working)
+from bson import ObjectId
+temp_rebalance_id = str(ObjectId())
+rebalance_id=temp_rebalance_id,
+```
+
+**Changes Made:**
+1. **Line 243** in `rebalance_model_portfolios()` - Generate temporary ObjectId for failed portfolios
+2. **Line 607** in `_rebalance_portfolio_internal()` - Generate temporary ObjectId for DTOs that will be updated
+
+**Files Modified:**
+- `src/core/services/rebalance_service.py` - Fixed both empty rebalance_id assignments
+
+**Validation Confirmed:**
+- ✅ Empty string `rebalance_id` properly fails validation
+- ✅ Valid ObjectId string passes validation
+- ✅ Service can be imported without errors
+- ✅ Unit tests continue to pass
+
+**Business Impact:**
+- **🔧 Production Stability** - Eliminates API failures from invalid rebalance_id values
+- **📊 Data Integrity** - Ensures all RebalanceDTO objects have valid ObjectId identifiers
+- **🚀 Reliability** - Prevents validation errors during portfolio rebalancing operations
+- **💼 User Experience** - API calls now succeed instead of returning 400 errors
+
+This fix resolves the immediate production issue while maintaining the rebalance persistence feature functionality.

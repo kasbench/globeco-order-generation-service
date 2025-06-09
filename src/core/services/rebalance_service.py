@@ -238,10 +238,15 @@ class RebalanceService:
                     )
 
                     # Create empty rebalance result for failed portfolio
+                    # Generate temporary ObjectId (will be updated after persistence)
+                    from bson import ObjectId
+
+                    temp_rebalance_id = str(ObjectId())
+
                     results.append(
                         RebalanceDTO(
                             portfolio_id=portfolio_id,
-                            rebalance_id="",  # Will be set after persistence
+                            rebalance_id=temp_rebalance_id,
                             transactions=[],
                             drifts=[],
                         )
@@ -598,10 +603,14 @@ class RebalanceService:
             market_value,
         )
 
-        # Create DTO
+        # Create DTO with temporary ObjectId (will be updated later)
+        from bson import ObjectId
+
+        temp_rebalance_id = str(ObjectId())
+
         dto = RebalanceDTO(
             portfolio_id=portfolio_id,
-            rebalance_id="",  # Will be set later
+            rebalance_id=temp_rebalance_id,
             transactions=transactions,
             drifts=drifts,
         )
