@@ -20,7 +20,7 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8088 \
     HOST=0.0.0.0 \
     CORS_ORIGINS="*" \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=DEBUG
 
 # Install system dependencies required for both architectures
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -140,6 +140,10 @@ RUN find /app/.venv/bin -type f -executable -exec chmod +x {} \; && \
 # Copy optimized application from builder
 COPY --from=builder --chown=appuser:appuser /app/dist /app
 
+# Copy startup script
+COPY --chown=appuser:appuser scripts/start-production.sh /app/
+RUN chmod +x /app/start-production.sh
+
 # Create required directories
 RUN mkdir -p /app/logs /app/data && \
     chown -R appuser:appuser /app/logs /app/data
@@ -157,18 +161,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Production entrypoint with proper signal handling
 ENTRYPOINT ["tini", "--"]
 
-# Production command with Gunicorn for better performance (uses environment PORT or defaults to 8088)
-CMD /app/.venv/bin/gunicorn src.main:app \
-     --worker-class uvicorn.workers.UvicornWorker \
-     --workers 4 \
-     --bind 0.0.0.0:${PORT:-8088} \
-     --access-logfile - \
-     --error-logfile - \
-     --log-level info \
-     --timeout 30 \
-     --keep-alive 2 \
-     --max-requests 1000 \
-     --max-requests-jitter 100
+# Production command with startup script that handles LOG_LEVEL properly
+CMD ["/app/start-production.sh"]
 
 # Metadata labels for multi-architecture support
 LABEL org.opencontainers.image.title="GlobeCo Order Generation Service" \

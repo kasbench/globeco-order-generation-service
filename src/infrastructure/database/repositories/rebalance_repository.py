@@ -6,10 +6,11 @@ for MongoDB persistence, using Beanie ODM for document operations.
 """
 
 import logging
+from decimal import Decimal
 from typing import List, Optional
 
-from beanie.exceptions import DocumentNotFound
-from bson import ObjectId
+from beanie.exceptions import CollectionWasNotInitialized, DocumentNotFound
+from bson import Decimal128, ObjectId
 from pymongo.errors import DuplicateKeyError
 
 from src.core.exceptions import (
@@ -30,6 +31,112 @@ logger = logging.getLogger(__name__)
 
 class MongoRebalanceRepository(RebalanceRepository):
     """MongoDB implementation of the Rebalance Repository using Beanie ODM."""
+
+    def _convert_decimal128_to_decimal(self, value):
+        """Convert Decimal128 to Python Decimal, or return value if already correct type."""
+        if isinstance(value, Decimal128):
+            return Decimal(str(value))
+        return value
+
+    def _convert_decimal128_recursively(self, obj):
+        """Recursively convert all Decimal128 values to Decimal in a data structure."""
+        logger.debug(
+            f"_convert_decimal128_recursively(): *** ENTRY POINT *** Processing object of type {type(obj)}"
+        )
+
+        # If this is the top-level call, log some diagnostic info
+        if hasattr(obj, 'portfolios'):
+            logger.debug(
+                f"_convert_decimal128_recursively(): Top-level document with {len(obj.portfolios)} portfolios"
+            )
+
+        if isinstance(obj, Decimal128):
+            logger.debug(
+                f"_convert_decimal128_recursively(): Converting Decimal128({obj}) to Decimal"
+            )
+            return Decimal(str(obj))
+        elif isinstance(obj, dict):
+            logger.debug(
+                f"_convert_decimal128_recursively(): Processing dict with {len(obj)} keys"
+            )
+            return {
+                key: self._convert_decimal128_recursively(value)
+                for key, value in obj.items()
+            }
+        elif isinstance(obj, list):
+            logger.debug(
+                f"_convert_decimal128_recursively(): Processing list with {len(obj)} items"
+            )
+            return [self._convert_decimal128_recursively(item) for item in obj]
+        elif hasattr(obj, '__dict__'):
+            # Handle Beanie document objects and other objects with attributes
+            logger.debug(
+                f"_convert_decimal128_recursively(): Processing object with __dict__, attributes: {list(obj.__dict__.keys())}"
+            )
+            for attr_name, attr_value in obj.__dict__.items():
+                logger.debug(
+                    f"_convert_decimal128_recursively(): Processing attribute {attr_name} of type {type(attr_value)}"
+                )
+                if isinstance(attr_value, Decimal128):
+                    logger.debug(
+                        f"_convert_decimal128_recursively(): Converting Decimal128 attribute {attr_name}"
+                    )
+                    setattr(obj, attr_name, Decimal(str(attr_value)))
+                elif isinstance(attr_value, (list, dict)) or hasattr(
+                    attr_value, '__dict__'
+                ):
+                    logger.debug(
+                        f"_convert_decimal128_recursively(): Recursing into attribute {attr_name}"
+                    )
+                    setattr(
+                        obj, attr_name, self._convert_decimal128_recursively(attr_value)
+                    )
+            return obj
+        else:
+            # Handle objects that might have attributes but no __dict__ (like some Beanie embedded docs)
+            logger.debug(
+                f"_convert_decimal128_recursively(): Checking for attributes on {type(obj)}"
+            )
+            try:
+                # Try to get all attributes using dir() and process them
+                for attr_name in dir(obj):
+                    if not attr_name.startswith('_') and not callable(
+                        getattr(obj, attr_name, None)
+                    ):
+                        try:
+                            attr_value = getattr(obj, attr_name)
+                            logger.debug(
+                                f"_convert_decimal128_recursively(): Found attribute {attr_name} = {type(attr_value)}"
+                            )
+                            if isinstance(attr_value, Decimal128):
+                                logger.debug(
+                                    f"_convert_decimal128_recursively(): Converting Decimal128 attribute {attr_name} on {type(obj)}"
+                                )
+                                setattr(obj, attr_name, Decimal(str(attr_value)))
+                            elif (
+                                isinstance(attr_value, (list, dict))
+                                or hasattr(attr_value, '__dict__')
+                                or (
+                                    hasattr(attr_value, '__class__')
+                                    and 'Embedded' in str(attr_value.__class__)
+                                )
+                            ):
+                                logger.debug(
+                                    f"_convert_decimal128_recursively(): Recursing into attribute {attr_name} on {type(obj)}"
+                                )
+                                setattr(
+                                    obj,
+                                    attr_name,
+                                    self._convert_decimal128_recursively(attr_value),
+                                )
+                        except (AttributeError, TypeError):
+                            # Skip attributes that can't be accessed or set
+                            continue
+            except Exception as e:
+                logger.debug(
+                    f"_convert_decimal128_recursively(): Could not process attributes for {type(obj)}: {e}"
+                )
+            return obj
 
     async def create(self, rebalance: Rebalance) -> Rebalance:
         """
@@ -77,20 +184,69 @@ class MongoRebalanceRepository(RebalanceRepository):
             RepositoryError: If retrieval fails due to invalid ID format
         """
         try:
+            logger.debug(
+                f"*** REPOSITORY GET_BY_ID ENTRY POINT *** rebalance_id={rebalance_id}"
+            )
+            logger.debug(
+                f"Repository.get_by_id(): Starting retrieval for rebalance_id={rebalance_id}"
+            )
+
+            # Validate ObjectId format
+            if not ObjectId.is_valid(rebalance_id):
+                logger.error(
+                    f"Repository.get_by_id(): Invalid ObjectId format: {rebalance_id}"
+                )
+                raise ValueError(f"Invalid ObjectId format: {rebalance_id}")
+
+            logger.debug(
+                f"Repository.get_by_id(): ObjectId validation passed for {rebalance_id}"
+            )
+
             # Convert string ID to ObjectId
             object_id = ObjectId(rebalance_id)
+            logger.debug(f"Repository.get_by_id(): Created ObjectId: {object_id}")
 
-            # Find document by ID
-            document = await RebalanceDocument.get(object_id)
+            # Find document by ID using raw MongoDB query to avoid Pydantic validation
+            logger.debug(
+                f"Repository.get_by_id(): Querying database for raw document..."
+            )
+            collection = RebalanceDocument.get_motor_collection()
+            raw_document = await collection.find_one({"_id": object_id})
+            logger.debug(
+                f"Repository.get_by_id(): Raw database query completed, found document: {raw_document is not None}"
+            )
 
-            if document is None:
+            if raw_document is None:
+                logger.info(
+                    f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
+                )
                 return None
 
-            # Convert to domain model
-            return self._convert_to_domain(document)
+            # Convert Decimal128 values in raw document
+            logger.debug(
+                f"Repository.get_by_id(): Converting Decimal128 values in raw document..."
+            )
+            converted_doc = self._convert_decimal128_recursively(raw_document)
+            logger.debug(f"Repository.get_by_id(): Decimal128 conversion completed")
+
+            # Convert to domain model directly from dictionary
+            logger.debug(
+                f"Repository.get_by_id(): Converting raw document to domain object..."
+            )
+            domain_obj = self._convert_raw_to_domain(converted_doc)
+            logger.debug(
+                f"Repository.get_by_id(): Successfully converted to domain object"
+            )
+            return domain_obj
 
         except (ValueError, TypeError) as e:
             error_msg = f"Invalid rebalance ID format: {rebalance_id}"
+            logger.error(f"{error_msg}. Original error: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Detailed traceback:", exc_info=True)
+            raise RepositoryError(error_msg, operation="get") from e
+        except CollectionWasNotInitialized as e:
+            error_msg = f"Database not initialized - please ensure Beanie ODM is properly configured"
             logger.error(error_msg)
             raise RepositoryError(error_msg, operation="get") from e
         except Exception as e:
@@ -283,6 +439,10 @@ class MongoRebalanceRepository(RebalanceRepository):
             error_msg = f"Invalid rebalance ID format: {rebalance_id}"
             logger.error(error_msg)
             raise RepositoryError(error_msg, operation="delete") from e
+        except CollectionWasNotInitialized as e:
+            error_msg = f"Database not initialized - please ensure Beanie ODM is properly configured"
+            logger.error(error_msg)
+            raise RepositoryError(error_msg, operation="delete") from e
         except Exception as e:
             error_msg = f"Failed to delete rebalance {rebalance_id}: {str(e)}"
             logger.error(error_msg)
@@ -380,46 +540,277 @@ class MongoRebalanceRepository(RebalanceRepository):
             created_at=rebalance.created_at,
         )
 
+    def _convert_raw_to_domain(self, doc_dict: dict) -> Rebalance:
+        """Convert raw MongoDB document dictionary to domain Rebalance."""
+        try:
+            logger.debug(
+                f"_convert_raw_to_domain(): Starting conversion from raw document"
+            )
+            logger.debug(
+                f"_convert_raw_to_domain(): Document keys: {list(doc_dict.keys())}"
+            )
+
+            # Check a sample to verify Decimal128 conversion
+            if 'portfolios' in doc_dict and len(doc_dict['portfolios']) > 0:
+                sample_portfolio = doc_dict['portfolios'][0]
+                if (
+                    'positions' in sample_portfolio
+                    and len(sample_portfolio['positions']) > 0
+                ):
+                    sample_position = sample_portfolio['positions'][0]
+                    if 'target' in sample_position:
+                        logger.debug(
+                            f"_convert_raw_to_domain(): Sample position target type: {type(sample_position['target'])}"
+                        )
+
+            logger.debug(
+                f"_convert_raw_to_domain(): Processing {len(doc_dict['portfolios'])} portfolios..."
+            )
+            portfolios = []
+            for i, portfolio_dict in enumerate(doc_dict['portfolios']):
+                logger.debug(
+                    f"_convert_raw_to_domain(): Processing portfolio {i+1}/{len(doc_dict['portfolios'])}"
+                )
+                positions = []
+                for j, position_dict in enumerate(portfolio_dict['positions']):
+                    logger.debug(
+                        f"_convert_raw_to_domain(): Processing position {j+1}/{len(portfolio_dict['positions'])} in portfolio {i+1}"
+                    )
+                    try:
+                        position = RebalancePosition(
+                            security_id=position_dict['security_id'],
+                            price=position_dict['price'],
+                            original_quantity=position_dict['original_quantity'],
+                            adjusted_quantity=position_dict['adjusted_quantity'],
+                            original_position_market_value=position_dict[
+                                'original_position_market_value'
+                            ],
+                            adjusted_position_market_value=position_dict[
+                                'adjusted_position_market_value'
+                            ],
+                            target=position_dict['target'],
+                            high_drift=position_dict['high_drift'],
+                            low_drift=position_dict['low_drift'],
+                            actual=position_dict['actual'],
+                            actual_drift=position_dict['actual_drift'],
+                            transaction_type=position_dict['transaction_type'],
+                            trade_quantity=position_dict['trade_quantity'],
+                            trade_date=position_dict['trade_date'],
+                        )
+                        positions.append(position)
+                        logger.debug(
+                            f"_convert_raw_to_domain(): Successfully created position {j+1}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"_convert_raw_to_domain(): Error creating position {j+1} in portfolio {i+1}: {str(e)}"
+                        )
+                        logger.error(
+                            f"_convert_raw_to_domain(): Position data types: security_id={type(position_dict['security_id'])}, price={type(position_dict['price'])}, target={type(position_dict['target'])}"
+                        )
+                        raise
+
+                try:
+                    portfolio = RebalancePortfolio(
+                        portfolio_id=portfolio_dict['portfolio_id'],
+                        market_value=portfolio_dict['market_value'],
+                        cash_before_rebalance=portfolio_dict['cash_before_rebalance'],
+                        cash_after_rebalance=portfolio_dict['cash_after_rebalance'],
+                        positions=positions,
+                    )
+                    portfolios.append(portfolio)
+                    logger.debug(
+                        f"_convert_raw_to_domain(): Successfully created portfolio {i+1}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"_convert_raw_to_domain(): Error creating portfolio {i+1}: {str(e)}"
+                    )
+                    logger.error(
+                        f"_convert_raw_to_domain(): Portfolio data types: portfolio_id={type(portfolio_dict['portfolio_id'])}, market_value={type(portfolio_dict['market_value'])}"
+                    )
+                    raise
+
+            logger.debug(
+                f"_convert_raw_to_domain(): Creating final Rebalance object..."
+            )
+            rebalance = Rebalance(
+                rebalance_id=doc_dict['_id'],
+                model_id=doc_dict['model_id'],
+                rebalance_date=doc_dict['rebalance_date'],
+                model_name=doc_dict['model_name'],
+                number_of_portfolios=doc_dict['number_of_portfolios'],
+                portfolios=portfolios,
+                version=doc_dict['version'],
+                created_at=doc_dict['created_at'],
+            )
+            logger.debug(
+                f"_convert_raw_to_domain(): Successfully created Rebalance object"
+            )
+            return rebalance
+
+        except Exception as e:
+            logger.error(
+                f"_convert_raw_to_domain(): Failed to convert raw document to domain object: {str(e)}"
+            )
+            logger.error(f"_convert_raw_to_domain(): Error type: {type(e).__name__}")
+            raise
+
     def _convert_to_domain(self, document: RebalanceDocument) -> Rebalance:
         """Convert RebalanceDocument to domain Rebalance."""
-        portfolios = []
-        for portfolio_doc in document.portfolios:
-            positions = []
-            for position_doc in portfolio_doc.positions:
-                position = RebalancePosition(
-                    security_id=position_doc.security_id,
-                    price=position_doc.price,
-                    original_quantity=position_doc.original_quantity,
-                    adjusted_quantity=position_doc.adjusted_quantity,
-                    original_position_market_value=position_doc.original_position_market_value,
-                    adjusted_position_market_value=position_doc.adjusted_position_market_value,
-                    target=position_doc.target,
-                    high_drift=position_doc.high_drift,
-                    low_drift=position_doc.low_drift,
-                    actual=position_doc.actual,
-                    actual_drift=position_doc.actual_drift,
-                    transaction_type=position_doc.transaction_type,
-                    trade_quantity=position_doc.trade_quantity,
-                    trade_date=position_doc.trade_date,
-                )
-                positions.append(position)
-
-            portfolio = RebalancePortfolio(
-                portfolio_id=portfolio_doc.portfolio_id,
-                market_value=portfolio_doc.market_value,
-                cash_before_rebalance=portfolio_doc.cash_before_rebalance,
-                cash_after_rebalance=portfolio_doc.cash_after_rebalance,
-                positions=positions,
+        try:
+            logger.debug(
+                f"_convert_to_domain(): *** ENTRY POINT *** Starting conversion"
             )
-            portfolios.append(portfolio)
+            logger.debug(f"_convert_to_domain(): Document type: {type(document)}")
+            logger.debug(f"_convert_to_domain(): Trying to access document.id...")
 
-        return Rebalance(
-            rebalance_id=document.id,
-            model_id=document.model_id,
-            rebalance_date=document.rebalance_date,
-            model_name=document.model_name,
-            number_of_portfolios=document.number_of_portfolios,
-            portfolios=portfolios,
-            version=document.version,
-            created_at=document.created_at,
-        )
+            try:
+                doc_id = document.id
+                logger.debug(
+                    f"_convert_to_domain(): Successfully accessed document.id: {doc_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"_convert_to_domain(): ERROR accessing document.id: {str(e)}"
+                )
+                raise
+
+            logger.debug(
+                f"_convert_to_domain(): Starting conversion for document id={document.id}"
+            )
+
+            # Convert document to dictionary first for easier processing
+            logger.debug(f"_convert_to_domain(): Converting document to dictionary...")
+            try:
+                # Convert Beanie document to dict
+                if hasattr(document, 'model_dump'):
+                    doc_dict = document.model_dump()
+                elif hasattr(document, 'dict'):
+                    doc_dict = document.dict()
+                else:
+                    # Fallback - try to access as dict
+                    doc_dict = dict(document)
+
+                logger.debug(
+                    f"_convert_to_domain(): Successfully converted to dict with keys: {list(doc_dict.keys())}"
+                )
+
+                # Now convert all Decimal128 values in the dictionary
+                logger.debug(
+                    f"_convert_to_domain(): Converting Decimal128 values in dictionary..."
+                )
+                doc_dict = self._convert_decimal128_recursively(doc_dict)
+                logger.debug(f"_convert_to_domain(): Decimal128 conversion completed")
+
+                # Check a sample after conversion
+                if 'portfolios' in doc_dict and len(doc_dict['portfolios']) > 0:
+                    sample_portfolio = doc_dict['portfolios'][0]
+                    if (
+                        'positions' in sample_portfolio
+                        and len(sample_portfolio['positions']) > 0
+                    ):
+                        sample_position = sample_portfolio['positions'][0]
+                        if 'target' in sample_position:
+                            logger.debug(
+                                f"_convert_to_domain(): Sample position target type after conversion: {type(sample_position['target'])}"
+                            )
+
+            except Exception as e:
+                logger.error(
+                    f"_convert_to_domain(): ERROR converting document to dict: {str(e)}"
+                )
+                logger.error(f"_convert_to_domain(): Error type: {type(e).__name__}")
+                raise
+
+            logger.debug(
+                f"_convert_to_domain(): Processing {len(doc_dict['portfolios'])} portfolios..."
+            )
+            portfolios = []
+            for i, portfolio_dict in enumerate(doc_dict['portfolios']):
+                logger.debug(
+                    f"_convert_to_domain(): Processing portfolio {i+1}/{len(doc_dict['portfolios'])}"
+                )
+                positions = []
+                for j, position_dict in enumerate(portfolio_dict['positions']):
+                    logger.debug(
+                        f"_convert_to_domain(): Processing position {j+1}/{len(portfolio_dict['positions'])} in portfolio {i+1}"
+                    )
+                    try:
+                        position = RebalancePosition(
+                            security_id=position_dict['security_id'],
+                            price=position_dict['price'],
+                            original_quantity=position_dict['original_quantity'],
+                            adjusted_quantity=position_dict['adjusted_quantity'],
+                            original_position_market_value=position_dict[
+                                'original_position_market_value'
+                            ],
+                            adjusted_position_market_value=position_dict[
+                                'adjusted_position_market_value'
+                            ],
+                            target=position_dict['target'],
+                            high_drift=position_dict['high_drift'],
+                            low_drift=position_dict['low_drift'],
+                            actual=position_dict['actual'],
+                            actual_drift=position_dict['actual_drift'],
+                            transaction_type=position_dict['transaction_type'],
+                            trade_quantity=position_dict['trade_quantity'],
+                            trade_date=position_dict['trade_date'],
+                        )
+                        positions.append(position)
+                        logger.debug(
+                            f"_convert_to_domain(): Successfully created position {j+1}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"_convert_to_domain(): Error creating position {j+1} in portfolio {i+1}: {str(e)}"
+                        )
+                        logger.error(
+                            f"_convert_to_domain(): Position data types: security_id={type(position_dict['security_id'])}, price={type(position_dict['price'])}, target={type(position_dict['target'])}"
+                        )
+                        raise
+
+                try:
+                    portfolio = RebalancePortfolio(
+                        portfolio_id=portfolio_dict['portfolio_id'],
+                        market_value=portfolio_dict['market_value'],
+                        cash_before_rebalance=portfolio_dict['cash_before_rebalance'],
+                        cash_after_rebalance=portfolio_dict['cash_after_rebalance'],
+                        positions=positions,
+                    )
+                    portfolios.append(portfolio)
+                    logger.debug(
+                        f"_convert_to_domain(): Successfully created portfolio {i+1}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"_convert_to_domain(): Error creating portfolio {i+1}: {str(e)}"
+                    )
+                    logger.error(
+                        f"_convert_to_domain(): Portfolio data types: portfolio_id={type(portfolio_dict['portfolio_id'])}, market_value={type(portfolio_dict['market_value'])}"
+                    )
+                    raise
+
+            logger.debug(f"_convert_to_domain(): Creating final Rebalance object...")
+            rebalance = Rebalance(
+                rebalance_id=doc_dict['_id'],
+                model_id=doc_dict['model_id'],
+                rebalance_date=doc_dict['rebalance_date'],
+                model_name=doc_dict['model_name'],
+                number_of_portfolios=doc_dict['number_of_portfolios'],
+                portfolios=portfolios,
+                version=doc_dict['version'],
+                created_at=doc_dict['created_at'],
+            )
+            logger.debug(f"_convert_to_domain(): Successfully created Rebalance object")
+            return rebalance
+
+        except Exception as e:
+            logger.error(
+                f"_convert_to_domain(): Failed to convert document to domain object: {str(e)}"
+            )
+            logger.error(f"_convert_to_domain(): Error type: {type(e).__name__}")
+            logger.error(
+                f"_convert_to_domain(): Document ID: {getattr(document, 'id', 'unknown')}"
+            )
+            raise

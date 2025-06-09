@@ -139,14 +139,21 @@ async def get_rebalance_by_id(
         logger.info(f"Retrieving rebalance {rebalance_id}")
 
         # Validate ObjectId format
-        if not ObjectId.is_valid(rebalance_id):
+        logger.debug(f"API: Validating ObjectId format for rebalance_id={rebalance_id}")
+        is_valid = ObjectId.is_valid(rebalance_id)
+        logger.debug(f"API: ObjectId.is_valid({rebalance_id}) = {is_valid}")
+
+        if not is_valid:
+            logger.error(f"API: ObjectId validation failed for {rebalance_id}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid rebalance ID format",
             )
 
         # Get rebalance
+        logger.debug(f"API: Calling repository.get_by_id({rebalance_id})")
         rebalance = await repository.get_by_id(rebalance_id)
+        logger.debug(f"API: Repository returned: {rebalance is not None}")
 
         if rebalance is None:
             raise HTTPException(

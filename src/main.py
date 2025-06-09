@@ -29,8 +29,9 @@ from src.core.utils import (
     set_correlation_id,
 )
 
-# Configure structured logging early
-configure_structured_logging()
+# Configure structured logging early with settings
+settings = get_settings()
+configure_structured_logging(settings.log_level)
 logger = get_logger(__name__)
 
 

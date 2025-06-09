@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8080, description="Server port")
     debug: bool = Field(default=False, description="Debug mode")
-    log_level: str = Field(default="INFO", description="Logging level")
+    log_level: str = Field(default="DEBUG", description="Logging level")
 
     # Database Configuration
     database_url: str = Field(
@@ -174,10 +174,25 @@ class Settings(BaseSettings):
         """
         Configure logging based on the log level setting.
         """
+        # Debug: Print the actual log level being set
+        print(f"[CONFIG] Setting log level to: {self.log_level.upper()}")
+
         logging.basicConfig(
             level=getattr(logging, self.log_level.upper()),
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+        # Debug: Verify the root logger level
+        root_logger = logging.getLogger()
+        print(
+            f"[CONFIG] Root logger level set to: {logging.getLevelName(root_logger.level)}"
+        )
+
+        # Debug: Create a test debug message
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            "Debug logging is working - this message should be visible when LOG_LEVEL=DEBUG"
         )
 
         # Set third-party loggers to WARNING to reduce noise

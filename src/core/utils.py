@@ -60,6 +60,13 @@ def configure_structured_logging(log_level: str = "INFO") -> None:
     Args:
         log_level: Logging level to configure
     """
+    print(f"[UTILS] Configuring structured logging with level: {log_level}")
+
+    # Check current root logger level before configuration
+    root_logger = logging.getLogger()
+    print(
+        f"[UTILS] Root logger level before: {logging.getLevelName(root_logger.level)}"
+    )
 
     def add_correlation_id(logger, method_name, event_dict):
         """Add correlation ID to log events."""
@@ -97,12 +104,27 @@ def configure_structured_logging(log_level: str = "INFO") -> None:
         cache_logger_on_first_use=True,
     )
 
-    # Configure standard library logging
-    logging.basicConfig(
-        format="%(message)s",
-        level=getattr(logging, log_level.upper()),
-        stream=None,
-    )
+    # Configure standard library logging only if not already configured
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        print(
+            f"[UTILS] No handlers found, calling basicConfig with level {log_level.upper()}"
+        )
+        logging.basicConfig(
+            format="%(message)s",
+            level=getattr(logging, log_level.upper()),
+            stream=None,
+        )
+    else:
+        print(
+            f"[UTILS] Handlers found ({len(root_logger.handlers)}), setting level to {log_level.upper()}"
+        )
+        # Update existing logger level to match the requested level
+        root_logger.setLevel(getattr(logging, log_level.upper()))
+
+    # Check final level
+    final_level = logging.getLevelName(root_logger.level)
+    print(f"[UTILS] Root logger level after configuration: {final_level}")
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
