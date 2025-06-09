@@ -183,6 +183,7 @@ class TestCompleteModelCreationAndRebalancing:
         rebalance_results = [
             RebalanceDTO(
                 portfolio_id="507f1f77bcf86cd799439011",
+                rebalance_id="507f1f77bcf86cd799439021",
                 transactions=[
                     TransactionDTO(
                         transaction_type="BUY",
@@ -220,6 +221,7 @@ class TestCompleteModelCreationAndRebalancing:
             ),
             RebalanceDTO(
                 portfolio_id="507f1f77bcf86cd799439012",
+                rebalance_id="507f1f77bcf86cd799439022",
                 transactions=[
                     TransactionDTO(
                         transaction_type="SELL",
@@ -308,6 +310,7 @@ class TestCompleteModelCreationAndRebalancing:
         def mock_rebalance_result(portfolio_id):
             return RebalanceDTO(
                 portfolio_id=portfolio_id,
+                rebalance_id="507f1f77bcf86cd799439023",
                 transactions=[
                     TransactionDTO(
                         transaction_type="BUY",
@@ -394,6 +397,7 @@ class TestCompleteModelCreationAndRebalancing:
         mock_rebalance_service.rebalance_portfolio.side_effect = None
         mock_rebalance_service.rebalance_portfolio.return_value = RebalanceDTO(
             portfolio_id="507f1f77bcf86cd799439011",
+            rebalance_id="507f1f77bcf86cd799439024",
             transactions=[],
             drifts=[],
         )

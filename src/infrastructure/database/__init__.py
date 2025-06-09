@@ -13,7 +13,7 @@ from .database import (
     health_check_database,
     init_database,
 )
-from .repositories import MongoModelRepository
+from .repositories import MongoModelRepository, MongoRebalanceRepository
 
 __all__ = [
     "DatabaseManager",
@@ -23,4 +23,5 @@ __all__ = [
     "close_database",
     "health_check_database",
     "MongoModelRepository",
+    "MongoRebalanceRepository",
 ]

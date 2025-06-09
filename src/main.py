@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from src.api.routers.health import router as health_router
 from src.api.routers.models import router as models_router
 from src.api.routers.rebalance import router as rebalance_router
+from src.api.routers.rebalances import router as rebalances_router
 from src.config import get_settings
 from src.core.monitoring import MetricsMiddleware, setup_monitoring
 from src.core.security import SecurityHeaders
@@ -201,6 +202,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/health", tags=["health"])
     app.include_router(models_router, prefix="/api/v1", tags=["models"])
     app.include_router(rebalance_router, prefix="/api/v1", tags=["rebalance"])
+    app.include_router(rebalances_router)
 
     # Global exception handler
     @app.exception_handler(TimeoutError)

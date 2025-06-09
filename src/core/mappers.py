@@ -161,8 +161,16 @@ class RebalanceMapper:
             )
             drifts.append(drift_dto)
 
+        # Generate a unique rebalance ID
+        from bson import ObjectId
+
+        rebalance_id = str(ObjectId())
+
         return RebalanceDTO(
-            portfolio_id=portfolio_id, transactions=transactions, drifts=drifts
+            portfolio_id=portfolio_id,
+            rebalance_id=rebalance_id,
+            transactions=transactions,
+            drifts=drifts,
         )
 
     @staticmethod

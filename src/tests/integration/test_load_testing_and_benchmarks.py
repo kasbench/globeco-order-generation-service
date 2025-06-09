@@ -131,6 +131,7 @@ class TestConcurrentLoadScenarios:
             await asyncio.sleep(0.2)  # Simulate processing time
             return {
                 "portfolio_id": portfolio_id,
+                "rebalance_id": f"507f1f77bcf86cd799{hash(portfolio_id) % 1000000:06x}",
                 "trades": [
                     {
                         "security_id": "BOND00123456789012345678",  # 24 chars
@@ -207,6 +208,7 @@ class TestConcurrentLoadScenarios:
 
         mock_rebalance_service.rebalance_portfolio.return_value = RebalanceDTO(
             portfolio_id="507f1f77bcf86cd799439011",
+            rebalance_id="507f1f77bcf86cd799439050",
             transactions=[],
             drifts=[],
         )
@@ -323,6 +325,7 @@ class TestPerformanceBenchmarks:
             time.sleep(0.3)  # 300ms
             return RebalanceDTO(
                 portfolio_id="507f1f77bcf86cd799000011",  # Use valid hex portfolio ID
+                rebalance_id="507f1f77bcf86cd799000051",
                 transactions=[],
                 drifts=[],
             )
@@ -540,6 +543,7 @@ class TestMathematicalComplexityScenarios:
 
             return RebalanceDTO(
                 portfolio_id=portfolio_id,
+                rebalance_id=f"507f1f77bcf86cd799{hash(portfolio_id) % 1000000:06x}",
                 transactions=[
                     TransactionDTO(
                         security_id="COMPLEX1234567890123456",  # 24 chars
@@ -650,6 +654,7 @@ class TestMathematicalComplexityScenarios:
                 await asyncio.sleep(0.1)
                 return {
                     "portfolio_id": portfolio_id,
+                    "rebalance_id": f"507f1f77bcf86cd799{hash(portfolio_id) % 1000000:06x}",
                     "trades": [
                         {
                             "security_id": "EDGE00123456789012345678",  # 24 chars
@@ -665,6 +670,7 @@ class TestMathematicalComplexityScenarios:
                 await asyncio.sleep(0.15)
                 return {
                     "portfolio_id": portfolio_id,
+                    "rebalance_id": f"507f1f77bcf86cd799{hash(portfolio_id) % 1000000:06x}",
                     "trades": [
                         {
                             "security_id": f"EDGE{i:018d}",  # 24 chars

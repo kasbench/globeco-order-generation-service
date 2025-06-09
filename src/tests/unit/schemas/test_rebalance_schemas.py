@@ -275,6 +275,7 @@ class TestRebalanceDTO:
 
         rebalance_data = {
             "portfolio_id": "683b6d88a29ee10e8b499643",
+            "rebalance_id": "507f1f77bcf86cd799439040",
             "transactions": [transaction],
             "drifts": [drift],
         }
@@ -293,7 +294,10 @@ class TestRebalanceDTO:
         # Test invalid portfolio ID format (not 24 characters)
         with pytest.raises(ValidationError, match="at least 24 characters"):
             RebalanceDTO(
-                portfolio_id="short_id", transactions=[], drifts=[]  # Too short
+                portfolio_id="short_id",  # Too short
+                rebalance_id="507f1f77bcf86cd799439041",
+                transactions=[],
+                drifts=[],
             )
 
     def test_rebalance_dto_empty_lists_allowed(self):
@@ -303,6 +307,7 @@ class TestRebalanceDTO:
         # Empty lists should be valid (no rebalancing needed)
         rebalance_dto = RebalanceDTO(
             portfolio_id="683b6d88a29ee10e8b499643",
+            rebalance_id="507f1f77bcf86cd799439042",
             transactions=[],  # No transactions needed
             drifts=[],  # No positions to analyze
         )

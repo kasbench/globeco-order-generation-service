@@ -63,6 +63,11 @@ class TestRebalanceServiceBusinessFlows:
         return RebalanceMapper()
 
     @pytest_asyncio.fixture
+    async def mock_rebalance_repository(self):
+        """Mock rebalance repository."""
+        return AsyncMock()
+
+    @pytest_asyncio.fixture
     async def rebalance_service(
         self,
         mock_model_repository,
@@ -70,6 +75,7 @@ class TestRebalanceServiceBusinessFlows:
         mock_drift_calculator,
         mock_portfolio_client,
         mock_pricing_client,
+        mock_rebalance_repository,
         rebalance_mapper,
     ):
         """Rebalance service with mocked dependencies."""
@@ -79,6 +85,7 @@ class TestRebalanceServiceBusinessFlows:
             drift_calculator=mock_drift_calculator,
             portfolio_accounting_client=mock_portfolio_client,
             pricing_client=mock_pricing_client,
+            rebalance_repository=mock_rebalance_repository,
             rebalance_mapper=rebalance_mapper,
             max_workers=2,
         )

@@ -7,5 +7,12 @@ objects in the Order Generation Service.
 
 from .model import InvestmentModel
 from .position import Position
+from .rebalance import Rebalance, RebalancePortfolio, RebalancePosition
 
-__all__ = ["InvestmentModel", "Position"]
+__all__ = [
+    "InvestmentModel",
+    "Position",
+    "Rebalance",
+    "RebalancePortfolio",
+    "RebalancePosition",
+]

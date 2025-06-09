@@ -6,7 +6,9 @@ using MongoDB with Beanie ODM for data persistence.
 """
 
 from .model_repository import MongoModelRepository
+from .rebalance_repository import MongoRebalanceRepository
 
 __all__ = [
     "MongoModelRepository",
+    "MongoRebalanceRepository",
 ]

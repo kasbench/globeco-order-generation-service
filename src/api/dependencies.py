@@ -25,6 +25,9 @@ from src.infrastructure.database.database import get_database
 from src.infrastructure.database.repositories.model_repository import (
     MongoModelRepository,
 )
+from src.infrastructure.database.repositories.rebalance_repository import (
+    MongoRebalanceRepository,
+)
 from src.infrastructure.external.portfolio_accounting_client import (
     PortfolioAccountingClient,
 )
@@ -115,6 +118,13 @@ def get_model_repository(
     return MongoModelRepository()
 
 
+def get_rebalance_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> MongoRebalanceRepository:
+    """Get rebalance repository implementation."""
+    return MongoRebalanceRepository()
+
+
 # Mappers
 
 
@@ -148,6 +158,7 @@ def get_model_service(
 
 def get_rebalance_service(
     model_repository: MongoModelRepository = Depends(get_model_repository),
+    rebalance_repository: MongoRebalanceRepository = Depends(get_rebalance_repository),
     optimization_engine: CVXPYOptimizationEngine = Depends(get_optimization_engine),
     drift_calculator: PortfolioDriftCalculator = Depends(get_drift_calculator),
     portfolio_accounting_client: PortfolioAccountingClient = Depends(
@@ -160,6 +171,7 @@ def get_rebalance_service(
     settings = get_settings()
     return RebalanceService(
         model_repository=model_repository,
+        rebalance_repository=rebalance_repository,
         optimization_engine=optimization_engine,
         drift_calculator=drift_calculator,
         portfolio_accounting_client=portfolio_accounting_client,

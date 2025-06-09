@@ -461,10 +461,13 @@ class TestRouterIntegration:
 
         mock_service = AsyncMock()
 
-        # Create proper async mock function
+        # Create proper async mock function that returns RebalanceDTO
+        from src.schemas.rebalance import RebalanceDTO
+
         async def mock_rebalance_portfolio(portfolio_id):
-            return Mock(
+            return RebalanceDTO(
                 portfolio_id=portfolio_id,
+                rebalance_id="507f1f77bcf86cd799439043",
                 transactions=[],
                 drifts=[],
             )

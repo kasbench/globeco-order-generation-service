@@ -16,6 +16,7 @@ from pymongo.errors import ConfigurationError, ServerSelectionTimeoutError
 from src.config import get_settings
 from src.core.exceptions import DatabaseConnectionError
 from src.models.model import ModelDocument
+from src.models.rebalance import RebalanceDocument
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class DatabaseManager:
             # Initialize Beanie with document models
             await init_beanie(
                 database=self.database,
-                document_models=[ModelDocument],
+                document_models=[ModelDocument, RebalanceDocument],
             )
 
             self._is_initialized = True

@@ -1,21 +1,149 @@
 """
-Pydantic schemas for portfolio rebalancing API contracts.
+Pydantic schemas for rebalance data transfer objects.
 
-This module defines the data transfer objects (DTOs) for rebalancing operations:
-- DriftDTO: Position drift analysis
-- RebalanceDTO: Complete rebalancing results with transactions and drift analysis
-
-All schemas include comprehensive validation for financial data and precise
-handling of portfolio optimization results.
+This module defines the API contracts for rebalance-related operations,
+including request and response DTOs.
 """
 
-import re
+from datetime import datetime
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 
+from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.schemas.transactions import TransactionDTO
+
+
+class RebalancePositionDTO(BaseModel):
+    """DTO for a position within a rebalanced portfolio."""
+
+    security_id: str = Field(..., description="Security identifier")
+    price: Decimal = Field(..., description="Price used for the rebalance")
+    original_quantity: Decimal = Field(..., description="Original value of u")
+    adjusted_quantity: Decimal = Field(..., description="New value of u'")
+    original_position_market_value: Decimal = Field(
+        ..., description="Original quantity times price"
+    )
+    adjusted_position_market_value: Decimal = Field(
+        ..., description="Adjusted quantity times price"
+    )
+    target: Decimal = Field(..., description="Target from the model")
+    high_drift: Decimal = Field(..., description="High drift from the model")
+    low_drift: Decimal = Field(..., description="Low drift from the model")
+    actual: Decimal = Field(..., description="(u' * p) / MV")
+    actual_drift: Decimal = Field(..., description="1 - (actual/target)")
+    transaction_type: Optional[str] = Field(
+        None, description="'BUY' or 'SELL' or None if no transaction"
+    )
+    trade_quantity: Optional[int] = Field(
+        None, description="Positive quantity to BUY or SELL"
+    )
+    trade_date: Optional[datetime] = Field(None, description="Current date (no time)")
+
+    class Config:
+        json_encoders = {
+            Decimal: lambda v: float(v),
+            datetime: lambda v: v.isoformat() if v else None,
+        }
+
+
+class RebalancePortfolioDTO(BaseModel):
+    """DTO for a portfolio within a rebalance operation."""
+
+    portfolio_id: str = Field(..., description="Portfolio identifier")
+    market_value: Decimal = Field(..., description="Market value of the portfolio")
+    cash_before_rebalance: Decimal = Field(
+        ..., description="Cash in the portfolio before rebalance"
+    )
+    cash_after_rebalance: Decimal = Field(
+        ..., description="Cash in the portfolio after rebalance"
+    )
+    positions: List[RebalancePositionDTO] = Field(
+        default_factory=list, description="List of positions in the portfolio"
+    )
+
+    class Config:
+        json_encoders = {
+            Decimal: lambda v: float(v),
+        }
+
+
+class RebalanceResultDTO(BaseModel):
+    """DTO for a complete rebalance operation (new API)."""
+
+    rebalance_id: str = Field(..., description="Unique rebalance identifier")
+    model_id: str = Field(..., description="ID of the model that was rebalanced")
+    rebalance_date: datetime = Field(..., description="Date of the rebalance")
+    model_name: str = Field(..., description="Name of the model that was rebalanced")
+    number_of_portfolios: int = Field(
+        ..., description="Number of portfolios in the rebalance"
+    )
+    portfolios: List[RebalancePortfolioDTO] = Field(
+        default_factory=list, description="List of portfolios rebalanced"
+    )
+    version: int = Field(default=1, description="Version for optimistic locking")
+    created_at: datetime = Field(..., description="Creation timestamp")
+
+    @field_validator('rebalance_id', 'model_id')
+    @classmethod
+    def validate_object_id_format(cls, v):
+        """Validate ObjectId string format."""
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId format")
+        return v
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+        }
+
+
+class RebalancesByPortfoliosRequestDTO(BaseModel):
+    """Request DTO for retrieving rebalances by portfolios."""
+
+    portfolios: List[str] = Field(..., description="List of portfolio IDs to filter by")
+
+    @field_validator('portfolios')
+    @classmethod
+    def validate_portfolios_not_empty(cls, v):
+        """Validate portfolios list is not empty."""
+        if not v:
+            raise ValueError("Portfolios list cannot be empty")
+        return v
+
+    @field_validator('portfolios')
+    @classmethod
+    def validate_portfolio_id_lengths(cls, v):
+        """Validate portfolio ID format (24-character strings)."""
+        for portfolio_id in v:
+            if not isinstance(portfolio_id, str) or len(portfolio_id) != 24:
+                raise ValueError("Portfolio IDs must be exactly 24 characters")
+        return v
+
+
+# The original RebalanceDTO (for backward compatibility)
+class RebalanceDTO(BaseModel):
+    """Original DTO for backward compatibility with existing rebalance API."""
+
+    portfolio_id: str = Field(
+        ..., description="Portfolio identifier", min_length=24, max_length=24
+    )
+    rebalance_id: str = Field(..., description="Rebalance record identifier")
+    transactions: List["TransactionDTO"] = Field(
+        default_factory=list, description="List of transactions"
+    )
+    drifts: List["DriftDTO"] = Field(
+        default_factory=list, description="List of drift information"
+    )
+
+    @field_validator('rebalance_id')
+    @classmethod
+    def validate_rebalance_id_format(cls, v):
+        """Validate ObjectId string format."""
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId format")
+        return v
 
 
 class DriftDTO(BaseModel):
@@ -76,6 +204,8 @@ class DriftDTO(BaseModel):
     @classmethod
     def validate_security_id(cls, v: str) -> str:
         """Validate security ID format: exactly 24 alphanumeric characters."""
+        import re
+
         if not re.match(r'^[A-Za-z0-9]{24}$', v):
             raise ValueError("Security ID must be exactly 24 alphanumeric characters")
         return v
@@ -104,37 +234,5 @@ class DriftDTO(BaseModel):
         return self
 
 
-class RebalanceDTO(BaseModel):
-    """
-    Complete rebalancing results.
-
-    Contains the full results of a portfolio rebalancing operation, including
-    the list of transactions to execute and drift analysis for all positions.
-    """
-
-    model_config = ConfigDict(json_encoders={Decimal: str})
-
-    portfolio_id: str = Field(
-        ...,
-        description="24-character alphanumeric portfolio identifier",
-        min_length=24,
-        max_length=24,
-    )
-
-    transactions: List[TransactionDTO] = Field(
-        default_factory=list,
-        description="List of transactions to execute for rebalancing",
-    )
-
-    drifts: List[DriftDTO] = Field(
-        default_factory=list,
-        description="Drift analysis for all positions in the portfolio",
-    )
-
-    @field_validator('portfolio_id')
-    @classmethod
-    def validate_portfolio_id(cls, v: str) -> str:
-        """Validate portfolio ID format: exactly 24 alphanumeric characters."""
-        if not re.match(r'^[A-Za-z0-9]{24}$', v):
-            raise ValueError("Portfolio ID must be exactly 24 alphanumeric characters")
-        return v
+# Forward reference resolution
+RebalanceDTO.model_rebuild()

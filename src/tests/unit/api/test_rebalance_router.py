@@ -67,6 +67,7 @@ def sample_rebalance_dto(sample_transaction_dto, sample_drift_dto):
     """Sample RebalanceDTO for testing."""
     return RebalanceDTO(
         portfolio_id="683b6d88a29ee10e8b499643",
+        rebalance_id="507f1f77bcf86cd799439030",
         transactions=[sample_transaction_dto],
         drifts=[sample_drift_dto],
     )
@@ -114,7 +115,10 @@ class TestRebalanceModelEndpoint:
         """Test rebalancing of model with multiple portfolios."""
         # Setup - Multiple portfolios
         rebalance_dto_2 = RebalanceDTO(
-            portfolio_id="683b6d88a29ee10e8b499644", transactions=[], drifts=[]
+            portfolio_id="683b6d88a29ee10e8b499644",
+            rebalance_id="507f1f77bcf86cd799439031",
+            transactions=[],
+            drifts=[],
         )
 
         mock_service = AsyncMock()
@@ -264,7 +268,10 @@ class TestRebalanceModelEndpoint:
         """Test partial success scenario where some portfolios fail rebalancing."""
         # Setup - Mixed success/failure results
         rebalance_dto_2 = RebalanceDTO(
-            portfolio_id="683b6d88a29ee10e8b499644", transactions=[], drifts=[]
+            portfolio_id="683b6d88a29ee10e8b499644",
+            rebalance_id="507f1f77bcf86cd799439031",
+            transactions=[],
+            drifts=[],
         )
 
         mock_service = AsyncMock()
@@ -339,6 +346,7 @@ class TestRebalancePortfolioEndpoint:
         # Setup
         no_change_rebalance = RebalanceDTO(
             portfolio_id="683b6d88a29ee10e8b499643",
+            rebalance_id="507f1f77bcf86cd799439032",
             transactions=[],  # No transactions needed
             drifts=[],  # No drift adjustments needed
         )
@@ -483,6 +491,7 @@ class TestRebalancePortfolioEndpoint:
 
         complex_rebalance = RebalanceDTO(
             portfolio_id="683b6d88a29ee10e8b499643",
+            rebalance_id="507f1f77bcf86cd799439033",
             transactions=complex_transactions,
             drifts=complex_drifts,
         )

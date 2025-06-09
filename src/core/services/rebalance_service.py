@@ -7,11 +7,12 @@ coordinating between optimization engine, external services, and domain logic.
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Dict, List
 
 import structlog
+from bson import ObjectId
 
 from src.core.exceptions import (
     ExternalServiceError,
@@ -20,7 +21,13 @@ from src.core.exceptions import (
     PortfolioNotFoundError,
 )
 from src.core.mappers import RebalanceMapper
+from src.domain.entities.rebalance import (
+    Rebalance,
+    RebalancePortfolio,
+    RebalancePosition,
+)
 from src.domain.repositories.model_repository import ModelRepository
+from src.domain.repositories.rebalance_repository import RebalanceRepository
 from src.domain.services.implementations.portfolio_drift_calculator import (
     PortfolioDriftCalculator,
 )
@@ -41,6 +48,7 @@ class RebalanceService:
     def __init__(
         self,
         model_repository: ModelRepository,
+        rebalance_repository: RebalanceRepository,
         optimization_engine: CVXPYOptimizationEngine,
         drift_calculator: PortfolioDriftCalculator,
         portfolio_accounting_client: PortfolioAccountingClient,
@@ -52,6 +60,7 @@ class RebalanceService:
 
         Args:
             model_repository: Repository for accessing investment models
+            rebalance_repository: Repository for storing rebalance results
             optimization_engine: Mathematical optimization engine
             drift_calculator: Portfolio drift calculation service
             portfolio_accounting_client: Client for portfolio position data
@@ -60,6 +69,7 @@ class RebalanceService:
             max_workers: Maximum parallel workers for multi-portfolio rebalancing
         """
         self._model_repository = model_repository
+        self._rebalance_repository = rebalance_repository
         self._optimization_engine = optimization_engine
         self._drift_calculator = drift_calculator
         self._portfolio_accounting_client = portfolio_accounting_client
@@ -124,13 +134,33 @@ class RebalanceService:
             # Update model's last rebalance date
             await self._update_last_rebalance_date(model)
 
+            # Create and persist rebalance record
+            rebalance_record = await self._create_rebalance_record(
+                model,
+                [portfolio_id],
+                {
+                    portfolio_id: {
+                        'current_positions': current_positions,
+                        'optimal_quantities': optimization_result.optimal_quantities,
+                        'prices': prices,
+                        'market_value': market_value,
+                        'transactions': transactions,
+                        'drifts': drifts,
+                    }
+                },
+            )
+
             rebalance_dto = RebalanceDTO(
-                portfolio_id=portfolio_id, transactions=transactions, drifts=drifts
+                portfolio_id=portfolio_id,
+                rebalance_id=str(rebalance_record.rebalance_id),
+                transactions=transactions,
+                drifts=drifts,
             )
 
             logger.info(
                 "Portfolio rebalancing completed",
                 portfolio_id=portfolio_id,
+                rebalance_id=str(rebalance_record.rebalance_id),
                 transaction_count=len(transactions),
                 drift_count=len(drifts),
             )
@@ -177,19 +207,21 @@ class RebalanceService:
                 logger.info("No portfolios associated with model", model_id=model_id)
                 return []
 
-            # Rebalance portfolios in parallel
+            # Rebalance portfolios in parallel and collect data for persistence
             logger.info(
                 "Rebalancing portfolios in parallel",
                 model_id=model_id,
                 portfolio_count=len(model.portfolios),
             )
 
+            # Create tasks for individual portfolio rebalancing (without persistence)
             rebalance_tasks = [
-                self.rebalance_portfolio(portfolio_id)
+                self._rebalance_portfolio_internal(portfolio_id, model)
                 for portfolio_id in model.portfolios
             ]
 
             # Execute rebalancing with error isolation
+            portfolio_data = {}
             results = []
             completed_tasks = await asyncio.gather(
                 *rebalance_tasks, return_exceptions=True
@@ -208,15 +240,33 @@ class RebalanceService:
                     # Create empty rebalance result for failed portfolio
                     results.append(
                         RebalanceDTO(
-                            portfolio_id=portfolio_id, transactions=[], drifts=[]
+                            portfolio_id=portfolio_id,
+                            rebalance_id="",  # Will be set after persistence
+                            transactions=[],
+                            drifts=[],
                         )
                     )
+                    portfolio_data[portfolio_id] = None
                 else:
-                    results.append(result)
+                    results.append(result['dto'])
+                    portfolio_data[portfolio_id] = result['data']
+
+            # Update model's last rebalance date
+            await self._update_last_rebalance_date(model)
+
+            # Create and persist single rebalance record for all portfolios
+            rebalance_record = await self._create_rebalance_record(
+                model, model.portfolios, portfolio_data
+            )
+
+            # Update all DTOs with the rebalance ID
+            for dto in results:
+                dto.rebalance_id = str(rebalance_record.rebalance_id)
 
             logger.info(
                 "Model portfolio rebalancing completed",
                 model_id=model_id,
+                rebalance_id=str(rebalance_record.rebalance_id),
                 successful_portfolios=len([r for r in results if r.transactions]),
                 total_portfolios=len(results),
             )
@@ -505,6 +555,224 @@ class RebalanceService:
                 model_id=str(model.model_id),
                 error=str(e),
             )
+
+    async def _rebalance_portfolio_internal(self, portfolio_id: str, model):
+        """Internal method to rebalance a portfolio without persistence.
+
+        Returns both the DTO and the raw data needed for persistence.
+        """
+        logger.info(
+            "Starting internal portfolio rebalancing", portfolio_id=portfolio_id
+        )
+
+        # Get current portfolio positions
+        current_positions = await self._get_current_positions(portfolio_id)
+
+        # Get security prices
+        security_ids = list(current_positions.keys()) + [
+            pos.security_id for pos in model.positions
+        ]
+        prices = await self._get_security_prices(security_ids)
+
+        # Calculate current market value (securities + cash)
+        market_value = await self._calculate_market_value(
+            current_positions, prices, portfolio_id
+        )
+
+        # Perform optimization
+        optimization_result = await self._optimize_portfolio(
+            current_positions, model, prices, market_value
+        )
+
+        # Generate transactions
+        transactions = self._generate_transactions(
+            current_positions, optimization_result.optimal_quantities, portfolio_id
+        )
+
+        # Calculate drift information
+        drifts = self._calculate_drifts(
+            current_positions,
+            optimization_result.optimal_quantities,
+            model,
+            prices,
+            market_value,
+        )
+
+        # Create DTO
+        dto = RebalanceDTO(
+            portfolio_id=portfolio_id,
+            rebalance_id="",  # Will be set later
+            transactions=transactions,
+            drifts=drifts,
+        )
+
+        # Collect data for persistence
+        data = {
+            'current_positions': current_positions,
+            'optimal_quantities': optimization_result.optimal_quantities,
+            'prices': prices,
+            'market_value': market_value,
+            'transactions': transactions,
+            'drifts': drifts,
+        }
+
+        logger.info(
+            "Internal portfolio rebalancing completed",
+            portfolio_id=portfolio_id,
+            transaction_count=len(transactions),
+            drift_count=len(drifts),
+        )
+
+        return {'dto': dto, 'data': data}
+
+    async def _create_rebalance_record(
+        self, model, portfolio_ids: List[str], portfolio_data: Dict
+    ) -> Rebalance:
+        """Create and persist a rebalance record."""
+        logger.info(
+            "Creating rebalance record",
+            model_id=str(model.model_id),
+            portfolio_count=len(portfolio_ids),
+        )
+
+        # Get cash positions for all portfolios
+        cash_positions = {}
+        for portfolio_id in portfolio_ids:
+            if portfolio_data.get(portfolio_id):
+                try:
+                    cash_before = (
+                        await self._portfolio_accounting_client.get_cash_position(
+                            portfolio_id
+                        )
+                    )
+                    # Calculate cash after rebalancing (simplified - would need actual transaction processing)
+                    cash_after = (
+                        cash_before  # For now, assume cash doesn't change significantly
+                    )
+                    cash_positions[portfolio_id] = {
+                        'before': cash_before,
+                        'after': cash_after,
+                    }
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to get cash position for {portfolio_id}: {e}"
+                    )
+                    cash_positions[portfolio_id] = {
+                        'before': Decimal('0'),
+                        'after': Decimal('0'),
+                    }
+
+        # Create rebalance portfolios
+        rebalance_portfolios = []
+        for portfolio_id in portfolio_ids:
+            data = portfolio_data.get(portfolio_id)
+            if not data:
+                continue  # Skip failed portfolios
+
+            # Create positions for this portfolio
+            positions = []
+
+            # Get union of all securities (current + model)
+            all_securities = set(data['current_positions'].keys())
+            for pos in model.positions:
+                all_securities.add(pos.security_id)
+
+            for security_id in all_securities:
+                original_qty = Decimal(data['current_positions'].get(security_id, 0))
+                adjusted_qty = Decimal(data['optimal_quantities'].get(security_id, 0))
+                price = data['prices'].get(security_id, Decimal('0'))
+
+                # Find model position for this security
+                model_position = None
+                for pos in model.positions:
+                    if pos.security_id == security_id:
+                        model_position = pos
+                        break
+
+                target = model_position.target.value if model_position else Decimal('0')
+                high_drift = (
+                    model_position.drift_bounds.high_drift
+                    if model_position
+                    else Decimal('0')
+                )
+                low_drift = (
+                    model_position.drift_bounds.low_drift
+                    if model_position
+                    else Decimal('0')
+                )
+
+                # Calculate actual allocation
+                actual = (
+                    (adjusted_qty * price) / data['market_value']
+                    if data['market_value'] > 0
+                    else Decimal('0')
+                )
+                actual_drift = (1 - (actual / target)) if target > 0 else Decimal('0')
+
+                # Determine transaction info
+                qty_delta = int(adjusted_qty - original_qty)
+                transaction_type = None
+                trade_quantity = None
+                trade_date = None
+
+                if qty_delta > 0:
+                    transaction_type = "BUY"
+                    trade_quantity = qty_delta
+                    trade_date = datetime.now(timezone.utc)
+                elif qty_delta < 0:
+                    transaction_type = "SELL"
+                    trade_quantity = abs(qty_delta)
+                    trade_date = datetime.now(timezone.utc)
+
+                position = RebalancePosition(
+                    security_id=security_id,
+                    price=price,
+                    original_quantity=original_qty,
+                    adjusted_quantity=adjusted_qty,
+                    original_position_market_value=original_qty * price,
+                    adjusted_position_market_value=adjusted_qty * price,
+                    target=target,
+                    high_drift=high_drift,
+                    low_drift=low_drift,
+                    actual=actual,
+                    actual_drift=actual_drift,
+                    transaction_type=transaction_type,
+                    trade_quantity=trade_quantity,
+                    trade_date=trade_date,
+                )
+                positions.append(position)
+
+            # Create portfolio
+            cash_info = cash_positions.get(
+                portfolio_id, {'before': Decimal('0'), 'after': Decimal('0')}
+            )
+            portfolio = RebalancePortfolio(
+                portfolio_id=portfolio_id,
+                market_value=data['market_value'],
+                cash_before_rebalance=cash_info['before'],
+                cash_after_rebalance=cash_info['after'],
+                positions=positions,
+            )
+            rebalance_portfolios.append(portfolio)
+
+        # Create rebalance record
+        rebalance = Rebalance(
+            model_id=model.model_id,
+            rebalance_date=datetime.now(timezone.utc),
+            model_name=model.name,
+            number_of_portfolios=len(rebalance_portfolios),
+            portfolios=rebalance_portfolios,
+            version=1,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        # Persist to database
+        saved_rebalance = await self._rebalance_repository.create(rebalance)
+
+        logger.info(
+            "Rebalance record created", rebalance_id=str(saved_rebalance.rebalance_id)
+        )
+        return saved_rebalance
 
     def __del__(self):
         """Cleanup thread pool on service destruction."""
