@@ -38,17 +38,40 @@ class MongoRebalanceRepository(RebalanceRepository):
             return Decimal(str(value))
         return value
 
-    def _convert_decimal128_recursively(self, obj):
+    def _convert_decimal128_recursively(self, obj, visited=None):
         """Recursively convert all Decimal128 values to Decimal in a data structure."""
-        logger.debug(
-            f"_convert_decimal128_recursively(): *** ENTRY POINT *** Processing object of type {type(obj)}"
-        )
+        if visited is None:
+            visited = set()
 
-        # If this is the top-level call, log some diagnostic info
-        if hasattr(obj, 'portfolios'):
+        # Prevent infinite recursion by tracking visited objects
+        obj_id = id(obj)
+        if obj_id in visited:
             logger.debug(
-                f"_convert_decimal128_recursively(): Top-level document with {len(obj.portfolios)} portfolios"
+                f"_convert_decimal128_recursively(): Skipping already visited object {type(obj)}"
             )
+            return obj
+
+        # Skip certain problematic types that can cause circular references
+        if hasattr(obj, '__class__'):
+            class_name = obj.__class__.__name__
+            if any(
+                skip_type in class_name
+                for skip_type in [
+                    'Session',
+                    'Engine',
+                    'Connection',
+                    'Cursor',
+                    'Collection',
+                ]
+            ):
+                logger.debug(
+                    f"_convert_decimal128_recursively(): Skipping {class_name} to avoid circular references"
+                )
+                return obj
+
+        logger.debug(
+            f"_convert_decimal128_recursively(): Processing object of type {type(obj)}"
+        )
 
         if isinstance(obj, Decimal128):
             logger.debug(
@@ -59,83 +82,98 @@ class MongoRebalanceRepository(RebalanceRepository):
             logger.debug(
                 f"_convert_decimal128_recursively(): Processing dict with {len(obj)} keys"
             )
-            return {
-                key: self._convert_decimal128_recursively(value)
-                for key, value in obj.items()
-            }
+            visited.add(obj_id)
+            try:
+                return {
+                    key: self._convert_decimal128_recursively(value, visited)
+                    for key, value in obj.items()
+                }
+            finally:
+                visited.discard(obj_id)
         elif isinstance(obj, list):
             logger.debug(
                 f"_convert_decimal128_recursively(): Processing list with {len(obj)} items"
             )
-            return [self._convert_decimal128_recursively(item) for item in obj]
+            visited.add(obj_id)
+            try:
+                return [
+                    self._convert_decimal128_recursively(item, visited) for item in obj
+                ]
+            finally:
+                visited.discard(obj_id)
         elif hasattr(obj, '__dict__'):
             # Handle Beanie document objects and other objects with attributes
             logger.debug(
-                f"_convert_decimal128_recursively(): Processing object with __dict__, attributes: {list(obj.__dict__.keys())}"
+                f"_convert_decimal128_recursively(): Processing object with __dict__"
             )
-            for attr_name, attr_value in obj.__dict__.items():
-                logger.debug(
-                    f"_convert_decimal128_recursively(): Processing attribute {attr_name} of type {type(attr_value)}"
-                )
-                if isinstance(attr_value, Decimal128):
-                    logger.debug(
-                        f"_convert_decimal128_recursively(): Converting Decimal128 attribute {attr_name}"
-                    )
-                    setattr(obj, attr_name, Decimal(str(attr_value)))
-                elif isinstance(attr_value, (list, dict)) or hasattr(
-                    attr_value, '__dict__'
-                ):
-                    logger.debug(
-                        f"_convert_decimal128_recursively(): Recursing into attribute {attr_name}"
-                    )
-                    setattr(
-                        obj, attr_name, self._convert_decimal128_recursively(attr_value)
-                    )
-            return obj
-        else:
-            # Handle objects that might have attributes but no __dict__ (like some Beanie embedded docs)
-            logger.debug(
-                f"_convert_decimal128_recursively(): Checking for attributes on {type(obj)}"
-            )
+            visited.add(obj_id)
             try:
-                # Try to get all attributes using dir() and process them
-                for attr_name in dir(obj):
-                    if not attr_name.startswith('_') and not callable(
-                        getattr(obj, attr_name, None)
-                    ):
+                # Only process specific known attributes to avoid circular references
+                safe_attrs = [
+                    'portfolios',
+                    'positions',
+                    'market_value',
+                    'price',
+                    'target',
+                    'actual',
+                    'high_drift',
+                    'low_drift',
+                    'actual_drift',
+                    'trade_quantity',
+                    'original_quantity',
+                    'adjusted_quantity',
+                    'original_position_market_value',
+                    'adjusted_position_market_value',
+                    'cash_before_rebalance',
+                    'cash_after_rebalance',
+                ]
+
+                for attr_name in safe_attrs:
+                    if hasattr(obj, attr_name):
                         try:
                             attr_value = getattr(obj, attr_name)
                             logger.debug(
-                                f"_convert_decimal128_recursively(): Found attribute {attr_name} = {type(attr_value)}"
+                                f"_convert_decimal128_recursively(): Processing safe attribute {attr_name}"
                             )
                             if isinstance(attr_value, Decimal128):
-                                logger.debug(
-                                    f"_convert_decimal128_recursively(): Converting Decimal128 attribute {attr_name} on {type(obj)}"
-                                )
                                 setattr(obj, attr_name, Decimal(str(attr_value)))
-                            elif (
-                                isinstance(attr_value, (list, dict))
-                                or hasattr(attr_value, '__dict__')
-                                or (
-                                    hasattr(attr_value, '__class__')
-                                    and 'Embedded' in str(attr_value.__class__)
-                                )
+                            elif isinstance(attr_value, (list, dict)) or hasattr(
+                                attr_value, '__dict__'
                             ):
-                                logger.debug(
-                                    f"_convert_decimal128_recursively(): Recursing into attribute {attr_name} on {type(obj)}"
-                                )
                                 setattr(
                                     obj,
                                     attr_name,
-                                    self._convert_decimal128_recursively(attr_value),
+                                    self._convert_decimal128_recursively(
+                                        attr_value, visited
+                                    ),
                                 )
-                        except (AttributeError, TypeError):
-                            # Skip attributes that can't be accessed or set
+                        except (AttributeError, TypeError, ValueError) as e:
+                            logger.debug(
+                                f"_convert_decimal128_recursively(): Skipping attribute {attr_name}: {e}"
+                            )
                             continue
-            except Exception as e:
-                logger.debug(
-                    f"_convert_decimal128_recursively(): Could not process attributes for {type(obj)}: {e}"
-                )
+                return obj
+            finally:
+                visited.discard(obj_id)
+        else:
+            # For other objects, return as-is to avoid recursion issues
+            logger.debug(
+                f"_convert_decimal128_recursively(): Returning {type(obj)} as-is"
+            )
+            return obj
+
+    def _convert_decimal128_to_decimal_simple(self, obj):
+        """Simple conversion for Decimal128 values in dictionaries and lists only."""
+        if isinstance(obj, Decimal128):
+            return Decimal(str(obj))
+        elif isinstance(obj, dict):
+            return {
+                key: self._convert_decimal128_to_decimal_simple(value)
+                for key, value in obj.items()
+            }
+        elif isinstance(obj, list):
+            return [self._convert_decimal128_to_decimal_simple(item) for item in obj]
+        else:
             return obj
 
     async def create(self, rebalance: Rebalance) -> Rebalance:
@@ -226,7 +264,7 @@ class MongoRebalanceRepository(RebalanceRepository):
             logger.debug(
                 f"Repository.get_by_id(): Converting Decimal128 values in raw document..."
             )
-            converted_doc = self._convert_decimal128_recursively(raw_document)
+            converted_doc = self._convert_decimal128_to_decimal_simple(raw_document)
             logger.debug(f"Repository.get_by_id(): Decimal128 conversion completed")
 
             # Convert to domain model directly from dictionary
@@ -550,6 +588,11 @@ class MongoRebalanceRepository(RebalanceRepository):
                 f"_convert_raw_to_domain(): Document keys: {list(doc_dict.keys())}"
             )
 
+            # Handle both '_id' (from raw MongoDB) and 'id' (from Beanie model_dump)
+            rebalance_id = doc_dict.get('_id') or doc_dict.get('id')
+            if rebalance_id is None:
+                raise KeyError("Neither '_id' nor 'id' found in document")
+
             # Check a sample to verify Decimal128 conversion
             if 'portfolios' in doc_dict and len(doc_dict['portfolios']) > 0:
                 sample_portfolio = doc_dict['portfolios'][0]
@@ -635,7 +678,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                 f"_convert_raw_to_domain(): Creating final Rebalance object..."
             )
             rebalance = Rebalance(
-                rebalance_id=doc_dict['_id'],
+                rebalance_id=rebalance_id,
                 model_id=doc_dict['model_id'],
                 rebalance_date=doc_dict['rebalance_date'],
                 model_name=doc_dict['model_name'],
@@ -663,147 +706,34 @@ class MongoRebalanceRepository(RebalanceRepository):
                 f"_convert_to_domain(): *** ENTRY POINT *** Starting conversion"
             )
             logger.debug(f"_convert_to_domain(): Document type: {type(document)}")
-            logger.debug(f"_convert_to_domain(): Trying to access document.id...")
 
-            try:
-                doc_id = document.id
-                logger.debug(
-                    f"_convert_to_domain(): Successfully accessed document.id: {doc_id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"_convert_to_domain(): ERROR accessing document.id: {str(e)}"
-                )
-                raise
-
-            logger.debug(
-                f"_convert_to_domain(): Starting conversion for document id={document.id}"
-            )
-
-            # Convert document to dictionary first for easier processing
+            # Convert Beanie document to dictionary using model_dump
             logger.debug(f"_convert_to_domain(): Converting document to dictionary...")
             try:
-                # Convert Beanie document to dict
                 if hasattr(document, 'model_dump'):
                     doc_dict = document.model_dump()
                 elif hasattr(document, 'dict'):
                     doc_dict = document.dict()
                 else:
-                    # Fallback - try to access as dict
-                    doc_dict = dict(document)
+                    raise AttributeError("Document has no model_dump or dict method")
 
                 logger.debug(
                     f"_convert_to_domain(): Successfully converted to dict with keys: {list(doc_dict.keys())}"
                 )
 
-                # Now convert all Decimal128 values in the dictionary
-                logger.debug(
-                    f"_convert_to_domain(): Converting Decimal128 values in dictionary..."
-                )
-                doc_dict = self._convert_decimal128_recursively(doc_dict)
-                logger.debug(f"_convert_to_domain(): Decimal128 conversion completed")
-
-                # Check a sample after conversion
-                if 'portfolios' in doc_dict and len(doc_dict['portfolios']) > 0:
-                    sample_portfolio = doc_dict['portfolios'][0]
-                    if (
-                        'positions' in sample_portfolio
-                        and len(sample_portfolio['positions']) > 0
-                    ):
-                        sample_position = sample_portfolio['positions'][0]
-                        if 'target' in sample_position:
-                            logger.debug(
-                                f"_convert_to_domain(): Sample position target type after conversion: {type(sample_position['target'])}"
-                            )
-
             except Exception as e:
                 logger.error(
                     f"_convert_to_domain(): ERROR converting document to dict: {str(e)}"
                 )
-                logger.error(f"_convert_to_domain(): Error type: {type(e).__name__}")
                 raise
 
-            logger.debug(
-                f"_convert_to_domain(): Processing {len(doc_dict['portfolios'])} portfolios..."
-            )
-            portfolios = []
-            for i, portfolio_dict in enumerate(doc_dict['portfolios']):
-                logger.debug(
-                    f"_convert_to_domain(): Processing portfolio {i+1}/{len(doc_dict['portfolios'])}"
-                )
-                positions = []
-                for j, position_dict in enumerate(portfolio_dict['positions']):
-                    logger.debug(
-                        f"_convert_to_domain(): Processing position {j+1}/{len(portfolio_dict['positions'])} in portfolio {i+1}"
-                    )
-                    try:
-                        position = RebalancePosition(
-                            security_id=position_dict['security_id'],
-                            price=position_dict['price'],
-                            original_quantity=position_dict['original_quantity'],
-                            adjusted_quantity=position_dict['adjusted_quantity'],
-                            original_position_market_value=position_dict[
-                                'original_position_market_value'
-                            ],
-                            adjusted_position_market_value=position_dict[
-                                'adjusted_position_market_value'
-                            ],
-                            target=position_dict['target'],
-                            high_drift=position_dict['high_drift'],
-                            low_drift=position_dict['low_drift'],
-                            actual=position_dict['actual'],
-                            actual_drift=position_dict['actual_drift'],
-                            transaction_type=position_dict['transaction_type'],
-                            trade_quantity=position_dict['trade_quantity'],
-                            trade_date=position_dict['trade_date'],
-                        )
-                        positions.append(position)
-                        logger.debug(
-                            f"_convert_to_domain(): Successfully created position {j+1}"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"_convert_to_domain(): Error creating position {j+1} in portfolio {i+1}: {str(e)}"
-                        )
-                        logger.error(
-                            f"_convert_to_domain(): Position data types: security_id={type(position_dict['security_id'])}, price={type(position_dict['price'])}, target={type(position_dict['target'])}"
-                        )
-                        raise
+            # Convert Decimal128 values using the simple approach
+            logger.debug(f"_convert_to_domain(): Converting Decimal128 values...")
+            doc_dict = self._convert_decimal128_to_decimal_simple(doc_dict)
+            logger.debug(f"_convert_to_domain(): Decimal128 conversion completed")
 
-                try:
-                    portfolio = RebalancePortfolio(
-                        portfolio_id=portfolio_dict['portfolio_id'],
-                        market_value=portfolio_dict['market_value'],
-                        cash_before_rebalance=portfolio_dict['cash_before_rebalance'],
-                        cash_after_rebalance=portfolio_dict['cash_after_rebalance'],
-                        positions=positions,
-                    )
-                    portfolios.append(portfolio)
-                    logger.debug(
-                        f"_convert_to_domain(): Successfully created portfolio {i+1}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"_convert_to_domain(): Error creating portfolio {i+1}: {str(e)}"
-                    )
-                    logger.error(
-                        f"_convert_to_domain(): Portfolio data types: portfolio_id={type(portfolio_dict['portfolio_id'])}, market_value={type(portfolio_dict['market_value'])}"
-                    )
-                    raise
-
-            logger.debug(f"_convert_to_domain(): Creating final Rebalance object...")
-            rebalance = Rebalance(
-                rebalance_id=doc_dict['_id'],
-                model_id=doc_dict['model_id'],
-                rebalance_date=doc_dict['rebalance_date'],
-                model_name=doc_dict['model_name'],
-                number_of_portfolios=doc_dict['number_of_portfolios'],
-                portfolios=portfolios,
-                version=doc_dict['version'],
-                created_at=doc_dict['created_at'],
-            )
-            logger.debug(f"_convert_to_domain(): Successfully created Rebalance object")
-            return rebalance
+            # Use the existing _convert_raw_to_domain method
+            return self._convert_raw_to_domain(doc_dict)
 
         except Exception as e:
             logger.error(

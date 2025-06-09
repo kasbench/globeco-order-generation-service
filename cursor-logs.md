@@ -1,5 +1,78 @@
 # Cursor AI Assistant Logs
 
+## Entry: Recursion Error Fix in MongoRebalanceRepository - COMPLETE RESOLUTION
+**Date**: Current session
+**Prompt**: User reported test failure with `RecursionError: maximum recursion depth exceeded` in `test_create_rebalance_success`, followed by fixture errors in multiple tests
+
+**Issue Analysis**:
+1. **Initial Problem**: Test `src/tests/unit/infrastructure/database/repositories/test_rebalance_repository.py::TestMongoRebalanceRepository::test_create_rebalance_success` was failing
+2. **Root Cause 1**: Recursion error in `_convert_decimal128_recursively` method due to circular references in Beanie documents
+3. **Root Cause 2**: Test fixture `sample_rebalance_document` had incorrect variable scoping in nested comprehensions
+
+**Problem Locations**:
+- File: `src/infrastructure/database/repositories/rebalance_repository.py` - recursion method
+- File: `src/tests/unit/infrastructure/database/repositories/test_rebalance_repository.py` - fixture comprehensions
+
+**Actions Taken**:
+
+**Phase 1 - Repository Recursion Fix**:
+1. **Replaced complex recursive approach** with simpler dictionary-based conversion:
+   - Added `_convert_decimal128_to_decimal_simple()` method for safe conversion
+   - Updated `_convert_to_domain()` to use `model_dump()` first, then convert
+   - Modified `_convert_raw_to_domain()` to handle both `'_id'` and `'id'` keys
+   - Prevented infinite recursion by avoiding complex object traversal
+
+2. **Updated test mocks** to properly configure `model_dump()` return values:
+   - Fixed `test_create_rebalance_success` mock configuration
+   - Updated `test_delete_by_id_success` to make `delete()` method properly awaitable
+   - Fixed `test_concurrent_access_handling` mock setup
+
+**Phase 2 - Test Fixture Variable Scoping Fix**:
+3. **Fixed nested comprehensions** in `sample_rebalance_document` fixture:
+   - **Problem**: Line 140 had `pos.positions[0].security_id` where `pos` was a `PortfolioEmbedded`, not a position container
+   - **Problem**: Nested comprehension `for pos in pos.positions` was shadowing outer variable
+   - **Solution**: Renamed variables to `portfolio` and `position` for clarity:
+     ```python
+     # BEFORE (incorrect):
+     'security_id': pos.positions[0].security_id,
+     # ... } for pos in pos.positions
+     # } for pos in mock_doc.portfolios
+
+     # AFTER (correct):
+     'security_id': position.security_id,
+     # ... } for position in portfolio.positions
+     # } for portfolio in mock_doc.portfolios
+     ```
+
+**Technical Details**:
+- **Pydantic Settings precedence**: Environment variables > .env file > code defaults
+- **Beanie document conversion**: `model_dump()` converts MongoDB `_id` to `id`
+- **Circular reference handling**: Avoided deep object traversal in favor of dictionary processing
+- **Mock configuration**: Properly configured `model_dump()`, `create()`, and `delete()` methods
+
+**Key Insights**:
+1. **Recursion Prevention**: When working with ORMs like Beanie, use `model_dump()` to convert to dictionaries before recursive processing
+2. **Variable Scoping**: Be careful with nested comprehensions and variable shadowing
+3. **Mock Configuration**: Async methods in mocks need `AsyncMock` and proper return value configuration
+4. **Test Fixture Design**: Use clear, descriptive variable names to avoid confusion
+
+**Final Result**:
+- **All 18 tests passing** in `test_rebalance_repository.py`
+- No more recursion errors
+- No more fixture attribute errors
+- Repository handles both raw MongoDB and Beanie document conversions correctly
+- Robust error handling and validation maintained
+
+**Files Modified**:
+- `src/infrastructure/database/repositories/rebalance_repository.py` - Repository implementation
+- `src/tests/unit/infrastructure/database/repositories/test_rebalance_repository.py` - Test fixtures and mocks
+
+**Performance**: Tests complete in ~6 seconds with no timeouts or memory issues.
+
+---
+
+## Entry: Port Configuration Fix and Test Resolution
+
 This file documents all interactions with the Cursor AI Assistant and the actions taken in response to prompts for the GlobeCo Order Generation Service project.
 
 **Current Log Period:** Starting 2024-12-23 (Post Phase 8.3 completion)
@@ -2485,3 +2558,61 @@ The specific rebalance ID `684703748cad343eddbfad30` doesn't exist in the curren
 5. **Database connectivity** - Raw MongoDB queries execute without errors
 
 This represents a complete resolution of the original Decimal128 validation issue that was preventing the rebalance retrieval API from functioning.
+
+---
+
+## 2024-12-09: Port Configuration Test Fix
+
+**Prompt**: The microservice is working now, but we have some failing tests. Let's start with the attached failure.
+
+**Issue Identified**: The `test_configuration_loads` test was failing because it expected the service to run on port 8088 (as specified in the non-functional requirements), but the configuration was loading port 8080.
+
+**Root Cause Analysis**:
+1. Non-functional requirements specify port 8088
+2. Docker configuration and all other documentation expect port 8088
+3. However, the configuration file had default=8080 and there was a system environment variable PORT=8080
+
+**Actions Taken**:
+1. ✅ Updated `src/config.py` to change default port from 8080 to 8088
+2. ✅ Updated `env.example` to use PORT=8088 for consistency
+3. ✅ Updated `.env` file to use PORT=8088
+4. ✅ Set environment variable `export PORT=8088` to override the cached value
+5. ✅ Verified test now passes
+
+**Key Learning**: Pydantic Settings precedence is:
+- Environment variables (highest priority)
+- .env file values
+- Default values in code (lowest priority)
+
+The `@lru_cache` decorator on `get_settings()` also means configuration is cached, so changes require either cache clearing or new Python session.
+
+**Result**: `src/tests/test_infrastructure.py::TestTestingInfrastructure::test_configuration_loads` now passes ✅
+
+---
+
+## Entry: Port Configuration Fix and Test Resolution
+**Date**: Current session
+**Prompt**: User reported failing tests, specifically `src/tests/test_infrastructure.py::TestTestingInfrastructure::test_configuration_loads`
+
+**Issue Analysis**:
+- Test expected `settings.port == 8088` but received 8080
+- Root cause: Configuration mismatch between code defaults (8080) and requirements/infrastructure (8088)
+- Requirements document specified Port: 8088
+- Docker and other infrastructure files used port 8088
+- System environment variable `PORT=8080` was overriding configuration
+
+**Actions Taken**:
+1. Updated `src/config.py` default port from 8080 to 8088
+2. Updated `env.example` from `PORT=8080` to `PORT=8088`
+3. Updated `.env` file from `PORT=8080` to `PORT=8088`
+4. Set system environment variable: `export PORT=8088`
+5. Cleared Pydantic Settings cache: `get_settings.cache_clear()`
+
+**Key Technical Insights**:
+- Pydantic Settings precedence: environment variables > .env file > code defaults
+- `@lru_cache` decorator caches configuration, requiring manual cache clearing
+- Consistent port configuration needed across all project files
+
+**Result**: Test `test_configuration_loads` now passes with correct port 8088 configuration
+
+---

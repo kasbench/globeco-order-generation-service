@@ -110,15 +110,58 @@ class TestMongoRebalanceRepository:
             positions=positions,
         )
 
-        return RebalanceDocument(
-            model_id=ObjectId("507f1f77bcf86cd799439011"),
-            rebalance_date=datetime(2024, 12, 20, 10, 30, 0, tzinfo=timezone.utc),
-            model_name="Test Model",
-            number_of_portfolios=1,
-            portfolios=[portfolio],
-            version=1,
-            created_at=datetime.now(timezone.utc),
-        )
+        # Create a mock document that behaves like RebalanceDocument
+        mock_doc = MagicMock()
+        mock_doc.id = ObjectId("507f1f77bcf86cd799439012")
+        mock_doc.model_id = ObjectId("507f1f77bcf86cd799439011")
+        mock_doc.model_name = "Test Model"
+        mock_doc.rebalance_date = datetime(2024, 12, 20, 10, 30, 0, tzinfo=timezone.utc)
+        mock_doc.number_of_portfolios = 1
+        mock_doc.portfolios = [portfolio]
+        mock_doc.version = 1
+        mock_doc.created_at = datetime.now(timezone.utc)
+
+        # Configure model_dump to return proper dictionary with 'id' instead of '_id'
+        # This simulates how Beanie converts MongoDB documents
+        mock_doc.model_dump.return_value = {
+            'id': mock_doc.id,
+            'model_id': mock_doc.model_id,
+            'model_name': mock_doc.model_name,
+            'rebalance_date': mock_doc.rebalance_date,
+            'number_of_portfolios': mock_doc.number_of_portfolios,
+            'portfolios': [
+                {
+                    'portfolio_id': portfolio.portfolio_id,
+                    'market_value': portfolio.market_value,
+                    'cash_before_rebalance': portfolio.cash_before_rebalance,
+                    'cash_after_rebalance': portfolio.cash_after_rebalance,
+                    'positions': [
+                        {
+                            'security_id': position.security_id,
+                            'price': position.price,
+                            'original_quantity': position.original_quantity,
+                            'adjusted_quantity': position.adjusted_quantity,
+                            'original_position_market_value': position.original_position_market_value,
+                            'adjusted_position_market_value': position.adjusted_position_market_value,
+                            'target': position.target,
+                            'high_drift': position.high_drift,
+                            'low_drift': position.low_drift,
+                            'actual': position.actual,
+                            'actual_drift': position.actual_drift,
+                            'transaction_type': position.transaction_type,
+                            'trade_quantity': position.trade_quantity,
+                            'trade_date': position.trade_date,
+                        }
+                        for position in portfolio.positions
+                    ],
+                }
+                for portfolio in mock_doc.portfolios
+            ],
+            'version': mock_doc.version,
+            'created_at': mock_doc.created_at,
+        }
+
+        return mock_doc
 
     @pytest.mark.asyncio
     async def test_create_rebalance_success(self, repository, sample_rebalance_entity):
@@ -136,6 +179,18 @@ class TestMongoRebalanceRepository:
         mock_document.version = sample_rebalance_entity.version
         mock_document.created_at = sample_rebalance_entity.created_at
         mock_document.create = AsyncMock(return_value=mock_document)
+
+        # Configure model_dump to return proper dictionary structure
+        mock_document.model_dump.return_value = {
+            '_id': mock_document.id,
+            'model_id': sample_rebalance_entity.model_id,
+            'model_name': sample_rebalance_entity.model_name,
+            'rebalance_date': sample_rebalance_entity.rebalance_date,
+            'number_of_portfolios': sample_rebalance_entity.number_of_portfolios,
+            'portfolios': [],
+            'version': sample_rebalance_entity.version,
+            'created_at': sample_rebalance_entity.created_at,
+        }
 
         with patch.object(
             repository, '_convert_to_document', return_value=mock_document
@@ -170,33 +225,54 @@ class TestMongoRebalanceRepository:
         """Test successful rebalance retrieval by ID."""
         rebalance_id = str(sample_rebalance_document.id)
 
-        with patch.object(RebalanceDocument, 'get', new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = sample_rebalance_document
+        # Mock the raw MongoDB collection operation
+        mock_collection = AsyncMock()
+        mock_collection.find_one.return_value = {
+            '_id': sample_rebalance_document.id,
+            'model_id': sample_rebalance_document.model_id,
+            'model_name': sample_rebalance_document.model_name,
+            'rebalance_date': sample_rebalance_document.rebalance_date,
+            'number_of_portfolios': sample_rebalance_document.number_of_portfolios,
+            'portfolios': [],
+            'version': sample_rebalance_document.version,
+            'created_at': sample_rebalance_document.created_at,
+        }
 
+        with patch.object(
+            RebalanceDocument, 'get_motor_collection', return_value=mock_collection
+        ):
             result = await repository.get_by_id(rebalance_id)
 
             assert result is not None
             assert str(result.rebalance_id) == rebalance_id
             assert result.model_name == sample_rebalance_document.model_name
-            mock_get.assert_called_once_with(ObjectId(rebalance_id))
+            mock_collection.find_one.assert_called_once_with(
+                {"_id": ObjectId(rebalance_id)}
+            )
 
     @pytest.mark.asyncio
     async def test_get_by_id_not_found(self, repository):
         """Test rebalance retrieval when not found."""
         rebalance_id = str(ObjectId())
 
-        with patch.object(RebalanceDocument, 'get', new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = None
+        # Mock the raw MongoDB collection operation
+        mock_collection = AsyncMock()
+        mock_collection.find_one.return_value = None
 
+        with patch.object(
+            RebalanceDocument, 'get_motor_collection', return_value=mock_collection
+        ):
             result = await repository.get_by_id(rebalance_id)
 
             assert result is None
-            mock_get.assert_called_once_with(ObjectId(rebalance_id))
+            mock_collection.find_one.assert_called_once_with(
+                {"_id": ObjectId(rebalance_id)}
+            )
 
     @pytest.mark.asyncio
     async def test_get_by_id_invalid_object_id(self, repository):
         """Test rebalance retrieval with invalid ObjectId."""
-        with pytest.raises(RepositoryError, match="Failed to retrieve rebalance"):
+        with pytest.raises(RepositoryError, match="Invalid rebalance ID format"):
             await repository.get_by_id("invalid_id")
 
     @pytest.mark.asyncio
@@ -307,20 +383,17 @@ class TestMongoRebalanceRepository:
             RebalanceDocument, 'find_one', new_callable=AsyncMock
         ) as mock_find_one:
             sample_rebalance_document.version = version
+            # Make the delete method async and properly awaitable
+            sample_rebalance_document.delete = AsyncMock(return_value=None)
             mock_find_one.return_value = sample_rebalance_document
 
-            # Mock the delete method on the Beanie Document class
-            with patch(
-                'src.models.rebalance.RebalanceDocument.delete', new_callable=AsyncMock
-            ) as mock_delete:
-                mock_delete.return_value = None
+            result = await repository.delete_by_id(rebalance_id, version)
 
-                result = await repository.delete_by_id(rebalance_id, version)
-
-                assert result is True
-                # Check that find_one was called once for version check
-                assert mock_find_one.call_count == 1
-                # Note: delete is called on the instance, so we can't directly assert on the mock
+            assert result is True
+            # Check that find_one was called once for version check
+            assert mock_find_one.call_count == 1
+            # Check that delete was called on the document
+            sample_rebalance_document.delete.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_delete_by_id_not_found(self, repository):
@@ -437,6 +510,18 @@ class TestMongoRebalanceRepository:
         mock_document_success.version = sample_rebalance_entity.version
         mock_document_success.created_at = sample_rebalance_entity.created_at
         mock_document_success.create = AsyncMock(return_value=mock_document_success)
+
+        # Configure model_dump to return proper data
+        mock_document_success.model_dump.return_value = {
+            'id': mock_document_success.id,
+            'model_id': mock_document_success.model_id,
+            'model_name': mock_document_success.model_name,
+            'rebalance_date': mock_document_success.rebalance_date,
+            'number_of_portfolios': mock_document_success.number_of_portfolios,
+            'portfolios': mock_document_success.portfolios,
+            'version': mock_document_success.version,
+            'created_at': mock_document_success.created_at,
+        }
 
         # Mock document that fails with duplicate key error
         mock_document_fail = MagicMock()
