@@ -1679,3 +1679,59 @@ rebalance_id=temp_rebalance_id,
 - **💼 User Experience** - API calls now succeed instead of returning 400 errors
 
 This fix resolves the immediate production issue while maintaining the rebalance persistence feature functionality.
+
+---
+
+## 2024-12-19 21:41 - Fixed Validation Error for Negative Actual Drift Values
+
+### Issue Description
+**Issue:** Rebalance operations were failing with validation error: "Decimal fields must be non-negative" for the `actual_drift` field in `PositionEmbedded` model.
+
+**Error Details:**
+```
+Failed to create rebalance for model 'Model 10': 1 validation error for PositionEmbedded
+actual_drift
+  Value error, Decimal fields must be non-negative [type=value_error, input_value=Decimal('-0.002462022616163237187892642'), input_type=Decimal]
+```
+
+**Business Context:** The `actual_drift` field represents the drift from target allocation, calculated as `1 - (actual/target)`. This value can legitimately be negative when a position is below its target allocation, which is a normal scenario in portfolio rebalancing.
+
+### Root Cause Analysis
+The `PositionEmbedded` model in `src/models/rebalance.py` had a field validator `validate_non_negative_decimals` that included `actual_drift` in its validation list. This validator incorrectly enforced non-negative constraints on drift values, preventing the creation of rebalance records when positions were below their target allocations.
+
+### Solution Applied
+1. **Removed `actual_drift` from Non-Negative Validation**: Removed `actual_drift` from the `validate_non_negative_decimals` validator in the `PositionEmbedded` class.
+
+2. **Added Specific Validator for `actual_drift`**: Created a dedicated validator that allows negative values while ensuring the field is still a valid Decimal:
+```python
+@field_validator('actual_drift')
+@classmethod
+def validate_actual_drift(cls, v):
+    """Validate actual_drift is a valid Decimal (can be negative)."""
+    if v is not None and not isinstance(v, Decimal):
+        raise ValueError("Actual drift must be a Decimal")
+    return v
+```
+
+### Files Modified
+- `src/models/rebalance.py`: Updated `PositionEmbedded` class validation
+
+### Validation Performed
+1. **Negative Drift Test**: Confirmed negative `actual_drift` values are now accepted
+2. **Positive Drift Test**: Verified positive `actual_drift` values still work correctly
+3. **Unit Tests**: All existing rebalance repository tests continue to pass
+4. **Type Validation**: Ensured `actual_drift` field still validates as proper Decimal type
+
+### Business Impact
+- **Fixed Production Issue**: Resolves validation failures that were preventing rebalance operations for portfolios with underweight positions
+- **Maintains Data Integrity**: Still validates that `actual_drift` is a proper Decimal type
+- **Preserves Other Validations**: All other financial field validations (price, quantities, market values) remain non-negative as required
+- **Enables Complete Rebalancing**: Allows proper handling of both overweight and underweight positions in portfolio optimization
+
+### Mathematical Context
+The `actual_drift` field represents portfolio deviation from target:
+- **Positive drift**: Position is above target allocation (overweight)
+- **Negative drift**: Position is below target allocation (underweight)
+- **Zero drift**: Position matches target allocation exactly
+
+Both positive and negative drifts are mathematically valid and necessary for accurate portfolio rebalancing calculations.

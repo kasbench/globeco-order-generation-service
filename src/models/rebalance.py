@@ -73,13 +73,20 @@ class PositionEmbedded(BaseModel):
         'high_drift',
         'low_drift',
         'actual',
-        'actual_drift',
     )
     @classmethod
     def validate_non_negative_decimals(cls, v):
         """Validate decimal fields are non-negative."""
         if v is not None and v < 0:
             raise ValueError("Decimal fields must be non-negative")
+        return v
+
+    @field_validator('actual_drift')
+    @classmethod
+    def validate_actual_drift(cls, v):
+        """Validate actual_drift is a valid Decimal (can be negative)."""
+        if v is not None and not isinstance(v, Decimal):
+            raise ValueError("Actual drift must be a Decimal")
         return v
 
     @field_validator('trade_quantity')
