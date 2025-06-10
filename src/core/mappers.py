@@ -13,14 +13,21 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Dict, List
 
-from bson import ObjectId
+from bson import Decimal128, ObjectId
 
 from src.domain.entities.model import InvestmentModel, Position
+from src.domain.entities.rebalance import Rebalance
 from src.domain.services.optimization_engine import OptimizationResult
 from src.domain.value_objects.drift_bounds import DriftBounds
 from src.domain.value_objects.target_percentage import TargetPercentage
 from src.schemas.models import ModelDTO, ModelPositionDTO, ModelPostDTO, ModelPutDTO
-from src.schemas.rebalance import DriftDTO, RebalanceDTO
+from src.schemas.rebalance import (
+    DriftDTO,
+    RebalanceDTO,
+    RebalancePortfolioDTO,
+    RebalancePositionDTO,
+    RebalanceResultDTO,
+)
 from src.schemas.transactions import TransactionDTO, TransactionType
 
 
@@ -129,6 +136,82 @@ class RebalanceMapper:
     """Mapper for optimization results and rebalance DTOs."""
 
     @staticmethod
+    def _ensure_decimal(value):
+        """Convert value to Decimal, handling Decimal128 objects specifically."""
+        if isinstance(value, Decimal128):
+            return Decimal(str(value))
+        elif isinstance(value, Decimal):
+            return value
+        else:
+            # For other types (int, float, str), try to convert to Decimal
+            return Decimal(str(value)) if value is not None else None
+
+    @staticmethod
+    def from_rebalance_entity(rebalance: Rebalance) -> RebalanceResultDTO:
+        """Convert Rebalance domain entity to RebalanceResultDTO.
+
+        This method ensures proper conversion of all Decimal fields and handles
+        any potential Decimal128 objects that might have escaped conversion.
+        """
+        portfolios_dto = []
+
+        for portfolio in rebalance.portfolios:
+            positions_dto = []
+
+            for position in portfolio.positions:
+                # Ensure all Decimal fields are properly converted
+                position_dto = RebalancePositionDTO(
+                    security_id=position.security_id,
+                    price=RebalanceMapper._ensure_decimal(position.price),
+                    original_quantity=RebalanceMapper._ensure_decimal(
+                        position.original_quantity
+                    ),
+                    adjusted_quantity=RebalanceMapper._ensure_decimal(
+                        position.adjusted_quantity
+                    ),
+                    original_position_market_value=RebalanceMapper._ensure_decimal(
+                        position.original_position_market_value
+                    ),
+                    adjusted_position_market_value=RebalanceMapper._ensure_decimal(
+                        position.adjusted_position_market_value
+                    ),
+                    target=RebalanceMapper._ensure_decimal(position.target),
+                    high_drift=RebalanceMapper._ensure_decimal(position.high_drift),
+                    low_drift=RebalanceMapper._ensure_decimal(position.low_drift),
+                    actual=RebalanceMapper._ensure_decimal(position.actual),
+                    actual_drift=RebalanceMapper._ensure_decimal(position.actual_drift),
+                    transaction_type=position.transaction_type,
+                    trade_quantity=position.trade_quantity,
+                    trade_date=position.trade_date,
+                )
+                positions_dto.append(position_dto)
+
+            # Ensure all Decimal fields are properly converted for portfolio
+            portfolio_dto = RebalancePortfolioDTO(
+                portfolio_id=portfolio.portfolio_id,
+                market_value=RebalanceMapper._ensure_decimal(portfolio.market_value),
+                cash_before_rebalance=RebalanceMapper._ensure_decimal(
+                    portfolio.cash_before_rebalance
+                ),
+                cash_after_rebalance=RebalanceMapper._ensure_decimal(
+                    portfolio.cash_after_rebalance
+                ),
+                positions=positions_dto,
+            )
+            portfolios_dto.append(portfolio_dto)
+
+        return RebalanceResultDTO(
+            rebalance_id=str(rebalance.rebalance_id),
+            model_id=str(rebalance.model_id),
+            rebalance_date=rebalance.rebalance_date,
+            model_name=rebalance.model_name,
+            number_of_portfolios=rebalance.number_of_portfolios,
+            portfolios=portfolios_dto,
+            version=rebalance.version,
+            created_at=rebalance.created_at,
+        )
+
+    @staticmethod
     def from_optimization_result(
         optimization_result: OptimizationResult,
         portfolio_id: str,
@@ -162,8 +245,6 @@ class RebalanceMapper:
             drifts.append(drift_dto)
 
         # Generate a unique rebalance ID
-        from bson import ObjectId
-
         rebalance_id = str(ObjectId())
 
         return RebalanceDTO(

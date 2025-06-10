@@ -12,6 +12,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.core.exceptions import ConcurrencyError, NotFoundError, RepositoryError
+from src.core.mappers import RebalanceMapper
 from src.domain.repositories.rebalance_repository import RebalanceRepository
 from src.infrastructure.database.repositories.rebalance_repository import (
     MongoRebalanceRepository,
@@ -58,46 +59,10 @@ async def get_rebalances(
         # Get rebalances with pagination
         rebalances = await repository.list_with_pagination(offset=offset, limit=limit)
 
-        # Convert to DTOs
+        # Convert to DTOs using mapper
         result = []
         for rebalance in rebalances:
-            dto = RebalanceResultDTO(
-                rebalance_id=str(rebalance.rebalance_id),
-                model_id=str(rebalance.model_id),
-                rebalance_date=rebalance.rebalance_date,
-                model_name=rebalance.model_name,
-                number_of_portfolios=rebalance.number_of_portfolios,
-                portfolios=[
-                    {
-                        "portfolio_id": portfolio.portfolio_id,
-                        "market_value": portfolio.market_value,
-                        "cash_before_rebalance": portfolio.cash_before_rebalance,
-                        "cash_after_rebalance": portfolio.cash_after_rebalance,
-                        "positions": [
-                            {
-                                "security_id": position.security_id,
-                                "price": position.price,
-                                "original_quantity": position.original_quantity,
-                                "adjusted_quantity": position.adjusted_quantity,
-                                "original_position_market_value": position.original_position_market_value,
-                                "adjusted_position_market_value": position.adjusted_position_market_value,
-                                "target": position.target,
-                                "high_drift": position.high_drift,
-                                "low_drift": position.low_drift,
-                                "actual": position.actual,
-                                "actual_drift": position.actual_drift,
-                                "transaction_type": position.transaction_type,
-                                "trade_quantity": position.trade_quantity,
-                                "trade_date": position.trade_date,
-                            }
-                            for position in portfolio.positions
-                        ],
-                    }
-                    for portfolio in rebalance.portfolios
-                ],
-                version=rebalance.version,
-                created_at=rebalance.created_at,
-            )
+            dto = RebalanceMapper.from_rebalance_entity(rebalance)
             result.append(dto)
 
         logger.info(f"Retrieved {len(result)} rebalances")
@@ -161,44 +126,8 @@ async def get_rebalance_by_id(
                 detail=f"Rebalance {rebalance_id} not found",
             )
 
-        # Convert to DTO
-        dto = RebalanceResultDTO(
-            rebalance_id=str(rebalance.rebalance_id),
-            model_id=str(rebalance.model_id),
-            rebalance_date=rebalance.rebalance_date,
-            model_name=rebalance.model_name,
-            number_of_portfolios=rebalance.number_of_portfolios,
-            portfolios=[
-                {
-                    "portfolio_id": portfolio.portfolio_id,
-                    "market_value": portfolio.market_value,
-                    "cash_before_rebalance": portfolio.cash_before_rebalance,
-                    "cash_after_rebalance": portfolio.cash_after_rebalance,
-                    "positions": [
-                        {
-                            "security_id": position.security_id,
-                            "price": position.price,
-                            "original_quantity": position.original_quantity,
-                            "adjusted_quantity": position.adjusted_quantity,
-                            "original_position_market_value": position.original_position_market_value,
-                            "adjusted_position_market_value": position.adjusted_position_market_value,
-                            "target": position.target,
-                            "high_drift": position.high_drift,
-                            "low_drift": position.low_drift,
-                            "actual": position.actual,
-                            "actual_drift": position.actual_drift,
-                            "transaction_type": position.transaction_type,
-                            "trade_quantity": position.trade_quantity,
-                            "trade_date": position.trade_date,
-                        }
-                        for position in portfolio.positions
-                    ],
-                }
-                for portfolio in rebalance.portfolios
-            ],
-            version=rebalance.version,
-            created_at=rebalance.created_at,
-        )
+        # Convert to DTO using mapper
+        dto = RebalanceMapper.from_rebalance_entity(rebalance)
 
         logger.info(f"Retrieved rebalance {rebalance_id}")
         return dto
@@ -249,46 +178,10 @@ async def get_rebalances_by_portfolios(
             portfolio_ids=request.portfolios, offset=offset, limit=limit
         )
 
-        # Convert to DTOs
+        # Convert to DTOs using mapper
         result = []
         for rebalance in rebalances:
-            dto = RebalanceResultDTO(
-                rebalance_id=str(rebalance.rebalance_id),
-                model_id=str(rebalance.model_id),
-                rebalance_date=rebalance.rebalance_date,
-                model_name=rebalance.model_name,
-                number_of_portfolios=rebalance.number_of_portfolios,
-                portfolios=[
-                    {
-                        "portfolio_id": portfolio.portfolio_id,
-                        "market_value": portfolio.market_value,
-                        "cash_before_rebalance": portfolio.cash_before_rebalance,
-                        "cash_after_rebalance": portfolio.cash_after_rebalance,
-                        "positions": [
-                            {
-                                "security_id": position.security_id,
-                                "price": position.price,
-                                "original_quantity": position.original_quantity,
-                                "adjusted_quantity": position.adjusted_quantity,
-                                "original_position_market_value": position.original_position_market_value,
-                                "adjusted_position_market_value": position.adjusted_position_market_value,
-                                "target": position.target,
-                                "high_drift": position.high_drift,
-                                "low_drift": position.low_drift,
-                                "actual": position.actual,
-                                "actual_drift": position.actual_drift,
-                                "transaction_type": position.transaction_type,
-                                "trade_quantity": position.trade_quantity,
-                                "trade_date": position.trade_date,
-                            }
-                            for position in portfolio.positions
-                        ],
-                    }
-                    for portfolio in rebalance.portfolios
-                ],
-                version=rebalance.version,
-                created_at=rebalance.created_at,
-            )
+            dto = RebalanceMapper.from_rebalance_entity(rebalance)
             result.append(dto)
 
         logger.info(f"Retrieved {len(result)} rebalances for portfolios")

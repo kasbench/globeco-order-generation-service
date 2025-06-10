@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from beanie import Document
-from bson import ObjectId
+from bson import Decimal128, ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import IndexModel
 
@@ -46,6 +46,26 @@ class PositionEmbedded(BaseModel):
         None, description="Positive quantity to BUY or SELL"
     )
     trade_date: Optional[datetime] = Field(None, description="Current date (no time)")
+
+    @field_validator(
+        'price',
+        'original_quantity',
+        'adjusted_quantity',
+        'original_position_market_value',
+        'adjusted_position_market_value',
+        'target',
+        'high_drift',
+        'low_drift',
+        'actual',
+        'actual_drift',
+        mode='before',
+    )
+    @classmethod
+    def convert_decimal128_to_decimal(cls, v):
+        """Convert Decimal128 from MongoDB to Python Decimal."""
+        if isinstance(v, Decimal128):
+            return Decimal(str(v))
+        return v
 
     @field_validator('security_id')
     @classmethod
@@ -117,6 +137,16 @@ class PortfolioEmbedded(BaseModel):
     positions: List[PositionEmbedded] = Field(
         default_factory=list, description="List of positions in the portfolio"
     )
+
+    @field_validator(
+        'market_value', 'cash_before_rebalance', 'cash_after_rebalance', mode='before'
+    )
+    @classmethod
+    def convert_decimal128_to_decimal(cls, v):
+        """Convert Decimal128 from MongoDB to Python Decimal."""
+        if isinstance(v, Decimal128):
+            return Decimal(str(v))
+        return v
 
     @field_validator('portfolio_id')
     @classmethod

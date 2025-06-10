@@ -435,6 +435,114 @@ class TestPositionMappers:
 class TestRebalanceMappers:
     """Test mapping between optimization results and rebalance DTOs."""
 
+    def test_from_rebalance_entity_conversion(self):
+        """Test conversion from Rebalance domain entity to RebalanceResultDTO."""
+        from datetime import datetime
+        from decimal import Decimal
+
+        from bson import Decimal128, ObjectId
+
+        from src.core.mappers import RebalanceMapper
+        from src.domain.entities.rebalance import (
+            Rebalance,
+            RebalancePortfolio,
+            RebalancePosition,
+        )
+        from src.schemas.rebalance import RebalanceResultDTO
+
+        # Create a rebalance entity with proper Decimal values (as they would be after repository conversion)
+        position = RebalancePosition(
+            security_id="STOCK1234567890123456789",
+            price=Decimal("100.50"),
+            original_quantity=Decimal("500"),
+            adjusted_quantity=Decimal("600"),
+            original_position_market_value=Decimal("50250.00"),
+            adjusted_position_market_value=Decimal("60300.00"),
+            target=Decimal("0.25"),
+            high_drift=Decimal("0.05"),
+            low_drift=Decimal("0.03"),
+            actual=Decimal("0.2515"),
+            actual_drift=Decimal("0.006"),
+            transaction_type="BUY",
+            trade_quantity=100,
+            trade_date=datetime.now(),
+        )
+
+        portfolio = RebalancePortfolio(
+            portfolio_id="683b6d88a29ee10e8b499643",
+            market_value=Decimal("240000.00"),
+            cash_before_rebalance=Decimal("10000.00"),
+            cash_after_rebalance=Decimal("9950.00"),
+            positions=[position],
+        )
+
+        rebalance = Rebalance(
+            rebalance_id=ObjectId(),
+            model_id=ObjectId(),
+            rebalance_date=datetime.now(),
+            model_name="Test Model",
+            number_of_portfolios=1,
+            portfolios=[portfolio],
+            version=1,
+            created_at=datetime.now(),
+        )
+
+        # Convert using mapper
+        result_dto = RebalanceMapper.from_rebalance_entity(rebalance)
+
+        # Verify it's the correct type
+        assert isinstance(result_dto, RebalanceResultDTO)
+
+        # Verify conversion worked - all decimal values should be Python Decimal, not Decimal128
+        assert isinstance(result_dto.portfolios[0].market_value, Decimal)
+        assert isinstance(result_dto.portfolios[0].positions[0].price, Decimal)
+        assert isinstance(result_dto.portfolios[0].positions[0].target, Decimal)
+
+        # Verify values are preserved correctly
+        assert result_dto.portfolios[0].market_value == Decimal("240000.00")
+        assert result_dto.portfolios[0].positions[0].price == Decimal("100.50")
+        assert result_dto.portfolios[0].positions[0].target == Decimal("0.25")
+
+        # Verify other fields are preserved
+        assert result_dto.model_name == "Test Model"
+        assert result_dto.number_of_portfolios == 1
+        assert len(result_dto.portfolios) == 1
+        assert len(result_dto.portfolios[0].positions) == 1
+
+    def test_ensure_decimal_helper_method(self):
+        """Test the _ensure_decimal helper method specifically for Decimal128 conversion."""
+        from decimal import Decimal
+
+        from bson import Decimal128
+
+        from src.core.mappers import RebalanceMapper
+
+        # Test Decimal128 conversion
+        decimal128_val = Decimal128("123.456789")
+        result = RebalanceMapper._ensure_decimal(decimal128_val)
+        assert isinstance(result, Decimal)
+        assert result == Decimal("123.456789")
+
+        # Test regular Decimal passthrough
+        decimal_val = Decimal("987.654321")
+        result = RebalanceMapper._ensure_decimal(decimal_val)
+        assert isinstance(result, Decimal)
+        assert result == Decimal("987.654321")
+
+        # Test None handling
+        result = RebalanceMapper._ensure_decimal(None)
+        assert result is None
+
+        # Test string conversion
+        result = RebalanceMapper._ensure_decimal("456.789")
+        assert isinstance(result, Decimal)
+        assert result == Decimal("456.789")
+
+        # Test integer conversion
+        result = RebalanceMapper._ensure_decimal(123)
+        assert isinstance(result, Decimal)
+        assert result == Decimal("123")
+
     def test_optimization_result_to_rebalance_dto_conversion(self):
         """Test conversion from OptimizationResult to RebalanceDTO."""
         from src.core.mappers import RebalanceMapper
