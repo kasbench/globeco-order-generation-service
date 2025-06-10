@@ -25,6 +25,7 @@ from src.domain.entities.rebalance import (
 )
 from src.domain.repositories.rebalance_repository import RebalanceRepository
 from src.models.rebalance import PortfolioEmbedded, PositionEmbedded, RebalanceDocument
+from src.schemas.rebalance import PortfolioWithPositionsDTO, PositionDTO
 
 logger = logging.getLogger(__name__)
 
@@ -744,3 +745,108 @@ class MongoRebalanceRepository(RebalanceRepository):
                 f"_convert_to_domain(): Document ID: {getattr(document, 'id', 'unknown')}"
             )
             raise
+
+    async def get_portfolios_by_rebalance_id(
+        self, rebalance_id: str
+    ) -> Optional[List[PortfolioWithPositionsDTO]]:
+        """
+        Get all portfolios associated with a specific rebalance.
+
+        Args:
+            rebalance_id: The unique identifier of the rebalance
+
+        Returns:
+            Optional[List[PortfolioWithPositionsDTO]]: List of portfolios with positions
+                                                       if rebalance exists, None otherwise
+
+        Raises:
+            RepositoryError: If retrieval fails
+        """
+        try:
+            logger.info(f"Retrieving portfolios for rebalance {rebalance_id}")
+
+            # Validate ObjectId format
+            if not ObjectId.is_valid(rebalance_id):
+                logger.error(f"Invalid ObjectId format: {rebalance_id}")
+                raise RepositoryError(f"Invalid rebalance ID format: {rebalance_id}")
+
+            # Convert string to ObjectId
+            object_id = ObjectId(rebalance_id)
+
+            # Find the rebalance document
+            document = await RebalanceDocument.find_one({"_id": object_id})
+
+            if document is None:
+                logger.warning(f"Rebalance {rebalance_id} not found")
+                return None
+
+            logger.debug(
+                f"Found rebalance document with {len(document.portfolios)} portfolios"
+            )
+
+            # Convert portfolios to DTOs
+            portfolio_dtos = []
+            for portfolio_doc in document.portfolios:
+                # Convert positions to DTOs
+                position_dtos = []
+                for position_doc in portfolio_doc.positions:
+                    position_dto = PositionDTO(
+                        security_id=position_doc.security_id,
+                        price=self._convert_decimal128_to_decimal(position_doc.price),
+                        original_quantity=self._convert_decimal128_to_decimal(
+                            position_doc.original_quantity
+                        ),
+                        adjusted_quantity=self._convert_decimal128_to_decimal(
+                            position_doc.adjusted_quantity
+                        ),
+                        original_position_market_value=self._convert_decimal128_to_decimal(
+                            position_doc.original_position_market_value
+                        ),
+                        adjusted_position_market_value=self._convert_decimal128_to_decimal(
+                            position_doc.adjusted_position_market_value
+                        ),
+                        target=self._convert_decimal128_to_decimal(position_doc.target),
+                        high_drift=self._convert_decimal128_to_decimal(
+                            position_doc.high_drift
+                        ),
+                        low_drift=self._convert_decimal128_to_decimal(
+                            position_doc.low_drift
+                        ),
+                        actual=self._convert_decimal128_to_decimal(position_doc.actual),
+                        actual_drift=self._convert_decimal128_to_decimal(
+                            position_doc.actual_drift
+                        ),
+                    )
+                    position_dtos.append(position_dto)
+
+                # Convert portfolio to DTO
+                portfolio_dto = PortfolioWithPositionsDTO(
+                    portfolio_id=portfolio_doc.portfolio_id,
+                    market_value=self._convert_decimal128_to_decimal(
+                        portfolio_doc.market_value
+                    ),
+                    cash_before_rebalance=self._convert_decimal128_to_decimal(
+                        portfolio_doc.cash_before_rebalance
+                    ),
+                    cash_after_rebalance=self._convert_decimal128_to_decimal(
+                        portfolio_doc.cash_after_rebalance
+                    ),
+                    positions=position_dtos,
+                )
+                portfolio_dtos.append(portfolio_dto)
+
+            logger.info(
+                f"Retrieved {len(portfolio_dtos)} portfolios for rebalance {rebalance_id}"
+            )
+            return portfolio_dtos
+
+        except CollectionWasNotInitialized as e:
+            logger.error(f"MongoDB collection not initialized: {e}")
+            raise RepositoryError("Database not properly initialized")
+        except Exception as e:
+            logger.error(
+                f"Failed to retrieve portfolios for rebalance {rebalance_id}: {str(e)}"
+            )
+            raise RepositoryError(
+                f"Failed to retrieve portfolios for rebalance {rebalance_id}: {str(e)}"
+            )

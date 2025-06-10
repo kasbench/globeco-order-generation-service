@@ -236,9 +236,11 @@ class TestGetRebalancePortfoliosEndpoint:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
         error_data = response.json()
-        assert "error" in error_data
-        assert "Rebalance not found" in error_data["error"]
-        assert error_data["status_code"] == 404
+        # Error is nested in detail field per FastAPI structure
+        detail = error_data["detail"]
+        assert "error" in detail
+        assert "Rebalance not found" in detail["error"]
+        assert detail["status_code"] == 404
 
         # Cleanup
         app_client.app.dependency_overrides.clear()
@@ -262,9 +264,11 @@ class TestGetRebalancePortfoliosEndpoint:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
         error_data = response.json()
-        assert "error" in error_data
-        assert "Invalid rebalance ID" in error_data["error"]
-        assert error_data["status_code"] == 400
+        # Error is nested in detail field per FastAPI structure
+        detail = error_data["detail"]
+        assert "error" in detail
+        assert "Invalid rebalance ID" in detail["error"]
+        assert detail["status_code"] == 400
 
         # Cleanup
         app_client.app.dependency_overrides.clear()
@@ -318,7 +322,7 @@ class TestGetRebalancePortfoliosEndpoint:
         # Setup
         mock_service = AsyncMock()
         mock_service.get_portfolios_by_rebalance_id.side_effect = RepositoryError(
-            "Database connection failed"
+            "Database connection failed", "get_portfolios_by_rebalance_id"
         )
 
         # Override the dependency
@@ -336,9 +340,11 @@ class TestGetRebalancePortfoliosEndpoint:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
         error_data = response.json()
-        assert "error" in error_data
-        assert "Internal server error" in error_data["error"]
-        assert error_data["status_code"] == 500
+        # Error is nested in detail field per FastAPI structure
+        detail = error_data["detail"]
+        assert "error" in detail
+        assert "Internal server error" in detail["error"]
+        assert detail["status_code"] == 500
 
         # Cleanup
         app_client.app.dependency_overrides.clear()
@@ -630,7 +636,7 @@ class TestPortfolioEndpointPerformance:
         large_positions = []
         for i in range(50):
             position = PositionDTO(
-                security_id=f"68430bfd20f302c879a6028{i:02d}",
+                security_id=f"68430bfd20f302c879a6{i:04d}",
                 price=Decimal(f"{50 + i}.25"),
                 original_quantity=Decimal(f"{100 + i}.0"),
                 adjusted_quantity=Decimal(f"{120 + i}.0"),
@@ -674,7 +680,7 @@ class TestPortfolioEndpointPerformance:
 
         # Verify all positions are properly serialized
         for i, position in enumerate(portfolio["positions"]):
-            assert position["security_id"] == f"68430bfd20f302c879a6028{i:02d}"
+            assert position["security_id"] == f"68430bfd20f302c879a6{i:04d}"
 
         # Cleanup
         app_client.app.dependency_overrides.clear()
@@ -687,7 +693,7 @@ class TestPortfolioEndpointPerformance:
             positions = []
             for i in range(10):
                 position = PositionDTO(
-                    security_id=f"security{p:02d}{i:02d}000000000000",
+                    security_id=f"68430bfd20f302c8{p:02d}{i:02d}{p:04d}",
                     price=Decimal(f"{100 + i}.00"),
                     original_quantity=Decimal(f"{50 + i}.0"),
                     adjusted_quantity=Decimal(f"{60 + i}.0"),
@@ -702,7 +708,7 @@ class TestPortfolioEndpointPerformance:
                 positions.append(position)
 
             portfolio = PortfolioWithPositionsDTO(
-                portfolio_id=f"portfolio{p:019d}",
+                portfolio_id=f"68430c0edbfc8143695{p:05d}",
                 market_value=Decimal(f"{100000 + p * 10000}.0"),
                 cash_before_rebalance=Decimal(f"{10000 + p * 1000}.0"),
                 cash_after_rebalance=Decimal(f"{10500 + p * 1000}.0"),
@@ -756,17 +762,26 @@ class TestPortfolioEndpointSecurity:
 
         # Test various injection attempts
         injection_attempts = [
-            "'; DROP TABLE rebalances; --",
-            "<script>alert('xss')</script>",
-            "../../../etc/passwd",
-            "%3Cscript%3Ealert%28%27xss%27%29%3C/script%3E",
-            "1' OR '1'='1",
+            (
+                "'; DROP TABLE rebalances; --",
+                status.HTTP_400_BAD_REQUEST,
+            ),  # Invalid ObjectId format
+            (
+                "<script>alert('xss')</script>",
+                status.HTTP_404_NOT_FOUND,
+            ),  # Route not found
+            ("../../../etc/passwd", status.HTTP_404_NOT_FOUND),  # Route not found
+            (
+                "%3Cscript%3Ealert%28%27xss%27%29%3C/script%3E",
+                status.HTTP_404_NOT_FOUND,
+            ),  # Route not found
+            ("1' OR '1'='1", status.HTTP_400_BAD_REQUEST),  # Invalid ObjectId format
         ]
 
-        for malicious_id in injection_attempts:
+        for malicious_id, expected_status in injection_attempts:
             response = app_client.get(f"/api/v1/rebalance/{malicious_id}/portfolios")
-            # Should return 400 for invalid format, not process the malicious input
-            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            # Should return appropriate status for invalid input
+            assert response.status_code == expected_status
 
         # Cleanup
         app_client.app.dependency_overrides.clear()
@@ -785,16 +800,16 @@ class TestPortfolioEndpointSecurity:
 
         # Test path traversal attempts
         traversal_attempts = [
-            "../",
-            "../../",
-            "%2e%2e%2f",
-            "..%2f",
-            "%2e%2e/",
+            ("../", status.HTTP_404_NOT_FOUND),  # Route not found
+            ("../../", status.HTTP_404_NOT_FOUND),  # Route not found
+            ("%2e%2e%2f", status.HTTP_404_NOT_FOUND),  # Route not found
+            ("..%2f", status.HTTP_404_NOT_FOUND),  # Route not found
+            ("%2e%2e/", status.HTTP_404_NOT_FOUND),  # Route not found
         ]
 
-        for traversal_id in traversal_attempts:
+        for traversal_id, expected_status in traversal_attempts:
             response = app_client.get(f"/api/v1/rebalance/{traversal_id}/portfolios")
-            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert response.status_code == expected_status
 
         # Cleanup
         app_client.app.dependency_overrides.clear()

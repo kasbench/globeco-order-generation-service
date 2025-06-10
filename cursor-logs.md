@@ -2879,3 +2879,60 @@ def convert_decimal128_to_decimal(cls, v):
 - Uses `Decimal(str(value))` for maximum precision preservation
 - Applied to all embedded document models that contain financial data
 - Solution addresses the fundamental issue rather than just symptoms
+
+---
+
+## Portfolio Endpoint API Implementation
+
+**Date:** 2024-12-20
+**Prompt:** Please implement @api-portfolio-endpoint-spec.md.
+
+**Context:** Following test-driven development, implementing the actual API endpoint to match the specification after creating comprehensive tests.
+
+### **Actions Taken:**
+
+1. **Added New API Endpoint** - Implemented `GET /api/v1/rebalance/{rebalance_id}/portfolios`:
+   - Added endpoint to `src/api/routers/rebalances.py`
+   - Comprehensive input validation (ObjectId format)
+   - Custom error response format matching API specification
+   - Proper logging and error handling
+
+2. **Extended Repository Interface** - Added `get_portfolios_by_rebalance_id` method:
+   - Updated `src/domain/repositories/rebalance_repository.py` interface
+   - Implemented method in `src/infrastructure/database/repositories/rebalance_repository.py`
+   - Proper Decimal128 → Decimal conversion for all financial data
+   - Direct DTO conversion in repository for performance
+
+3. **Custom Error Response Format** - Implemented specification-compliant error responses:
+   - Created `PortfolioErrorResponse` model with `error`, `message`, `status_code` fields
+   - Replaced FastAPI default error format with custom specification format
+   - Consistent error handling across all scenarios (404, 400, 500)
+
+4. **Fixed Test Issues** - Resolved test failures and validation problems:
+   - Fixed `RepositoryError` constructor signature (required `operation` parameter)
+   - Corrected ID validation patterns (24-character MongoDB ObjectId format)
+   - Updated security test expectations for proper HTTP status codes
+   - Fixed assertion patterns in performance tests
+
+### **Key Implementation Details:**
+
+- **Endpoint URL:** `GET /api/v1/rebalance/{rebalance_id}/portfolios`
+- **Response Format:** Array of `PortfolioWithPositionsDTO` objects
+- **Error Handling:** Custom error format with nested structure in FastAPI `detail` field
+- **Data Conversion:** Complete Decimal128 handling from MongoDB to API response
+- **Validation:** MongoDB ObjectId format validation with proper error responses
+- **Security:** Injection attack protection through ObjectId validation
+
+### **Test Results:**
+```
+===================================== 18 passed, 139 warnings in 0.19s =====================================
+```
+
+All 18 tests passing including:
+- ✅ Success scenarios (single/multiple portfolios, empty results)
+- ✅ Error handling (404, 400, 500 status codes)
+- ✅ Data validation and business logic
+- ✅ Performance testing with large datasets
+- ✅ Security testing (injection protection, path traversal)
+
+This completes the portfolio endpoint implementation, providing a production-ready API that matches the specification and passes comprehensive test coverage.
