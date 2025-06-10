@@ -15,6 +15,88 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from src.schemas.transactions import TransactionDTO
 
 
+class PositionDTO(BaseModel):
+    """DTO for a position within a portfolio for the portfolio endpoint API."""
+
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: lambda v: float(v),
+        }
+    )
+
+    security_id: str = Field(..., description="Unique identifier for the security")
+    price: Decimal = Field(..., description="Current price per share/unit", gt=0)
+    original_quantity: Decimal = Field(
+        ..., description="Quantity before rebalancing", ge=0
+    )
+    adjusted_quantity: Decimal = Field(
+        ..., description="Quantity after rebalancing", ge=0
+    )
+    original_position_market_value: Decimal = Field(
+        ..., description="Market value before rebalancing", ge=0
+    )
+    adjusted_position_market_value: Decimal = Field(
+        ..., description="Market value after rebalancing", ge=0
+    )
+    target: Decimal = Field(
+        ..., description="Target allocation percentage (as decimal)", ge=0, le=1
+    )
+    high_drift: Decimal = Field(
+        ..., description="High drift threshold (as decimal)", ge=0, le=1
+    )
+    low_drift: Decimal = Field(
+        ..., description="Low drift threshold (as decimal)", ge=0, le=1
+    )
+    actual: Decimal = Field(
+        ..., description="Actual allocation percentage (as decimal)", ge=0, le=1
+    )
+    actual_drift: Decimal = Field(
+        ..., description="Actual drift from target (as decimal)"
+    )
+
+    @field_validator('security_id')
+    @classmethod
+    def validate_security_id_format(cls, v):
+        """Validate security ID is 24-character string."""
+        if not isinstance(v, str) or len(v) != 24:
+            raise ValueError("Security ID must be exactly 24 characters")
+        return v
+
+
+class PortfolioWithPositionsDTO(BaseModel):
+    """DTO for a portfolio with positions for the portfolio endpoint API."""
+
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: lambda v: float(v),
+        }
+    )
+
+    portfolio_id: str = Field(..., description="Unique identifier for the portfolio")
+    market_value: Decimal = Field(
+        ..., description="Total market value of the portfolio", gt=0
+    )
+    cash_before_rebalance: Decimal = Field(
+        ..., description="Cash amount before rebalancing", ge=0
+    )
+    cash_after_rebalance: Decimal = Field(
+        ..., description="Cash amount after rebalancing", ge=0
+    )
+    positions: List[PositionDTO] = Field(
+        default_factory=list, description="Array of position objects in this portfolio"
+    )
+
+    @field_validator('portfolio_id')
+    @classmethod
+    def validate_portfolio_id_format(cls, v):
+        """Validate portfolio ID is 24-character MongoDB ObjectId."""
+        if not isinstance(v, str) or len(v) != 24:
+            raise ValueError("Portfolio ID must be exactly 24 characters")
+        if not ObjectId.is_valid(v):
+            raise ValueError("Portfolio ID must be a valid MongoDB ObjectId")
+        return v
+
+
 class RebalancePositionDTO(BaseModel):
     """DTO for a position within a rebalanced portfolio."""
 
