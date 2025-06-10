@@ -171,3 +171,24 @@ class RebalanceRepository(ABC):
             RepositoryError: If retrieval fails
         """
         pass
+
+    @abstractmethod
+    async def get_positions_by_rebalance_and_portfolio_id(
+        self, rebalance_id: str, portfolio_id: str
+    ) -> Optional[List["PositionDTO"]]:
+        """
+        Get all positions for a specific portfolio within a specific rebalance.
+
+        Args:
+            rebalance_id: The unique identifier of the rebalance
+            portfolio_id: The unique identifier of the portfolio
+
+        Returns:
+            Optional[List[PositionDTO]]: List of positions if rebalance and portfolio exist,
+                                        None if rebalance not found, empty list if portfolio
+                                        not found in rebalance
+
+        Raises:
+            RepositoryError: If retrieval fails
+        """
+        pass

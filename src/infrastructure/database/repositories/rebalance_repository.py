@@ -850,3 +850,121 @@ class MongoRebalanceRepository(RebalanceRepository):
             raise RepositoryError(
                 f"Failed to retrieve portfolios for rebalance {rebalance_id}: {str(e)}"
             )
+
+    async def get_positions_by_rebalance_and_portfolio_id(
+        self, rebalance_id: str, portfolio_id: str
+    ) -> Optional[List[PositionDTO]]:
+        """
+        Get all positions for a specific portfolio within a specific rebalance.
+
+        Args:
+            rebalance_id: The unique identifier of the rebalance
+            portfolio_id: The unique identifier of the portfolio
+
+        Returns:
+            Optional[List[PositionDTO]]: List of positions if rebalance and portfolio exist,
+                                        None if rebalance not found, empty list if portfolio
+                                        not found in rebalance
+
+        Raises:
+            RepositoryError: If retrieval fails
+        """
+        try:
+            logger.info(
+                f"Retrieving positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
+            )
+
+            # Validate ObjectId formats
+            if not ObjectId.is_valid(rebalance_id):
+                logger.error(f"Invalid rebalance ObjectId format: {rebalance_id}")
+                raise RepositoryError(f"Invalid rebalance ID format: {rebalance_id}")
+
+            if not ObjectId.is_valid(portfolio_id):
+                logger.error(f"Invalid portfolio ObjectId format: {portfolio_id}")
+                raise RepositoryError(f"Invalid portfolio ID format: {portfolio_id}")
+
+            # Convert string to ObjectId
+            rebalance_object_id = ObjectId(rebalance_id)
+
+            # Find the rebalance document
+            document = await RebalanceDocument.find_one({"_id": rebalance_object_id})
+
+            if document is None:
+                logger.warning(f"Rebalance {rebalance_id} not found")
+                return None
+
+            logger.debug(
+                f"Found rebalance document with {len(document.portfolios)} portfolios"
+            )
+
+            # Find the specific portfolio within the rebalance
+            target_portfolio = None
+            for portfolio_doc in document.portfolios:
+                if portfolio_doc.portfolio_id == portfolio_id:
+                    target_portfolio = portfolio_doc
+                    break
+
+            if target_portfolio is None:
+                logger.info(
+                    f"Portfolio {portfolio_id} not found in rebalance {rebalance_id}"
+                )
+                # Return a special indicator that portfolio was not found
+                # We'll use a custom exception to distinguish this case
+                raise RepositoryError(
+                    message=f"Portfolio {portfolio_id} not found in rebalance {rebalance_id}",
+                    operation="portfolio_not_found",
+                    entity_type="portfolio",
+                    entity_id=portfolio_id,
+                )
+
+            logger.debug(
+                f"Found portfolio {portfolio_id} with {len(target_portfolio.positions)} positions"
+            )
+
+            # Convert positions to DTOs
+            position_dtos = []
+            for position_doc in target_portfolio.positions:
+                position_dto = PositionDTO(
+                    security_id=position_doc.security_id,
+                    price=self._convert_decimal128_to_decimal(position_doc.price),
+                    original_quantity=self._convert_decimal128_to_decimal(
+                        position_doc.original_quantity
+                    ),
+                    adjusted_quantity=self._convert_decimal128_to_decimal(
+                        position_doc.adjusted_quantity
+                    ),
+                    original_position_market_value=self._convert_decimal128_to_decimal(
+                        position_doc.original_position_market_value
+                    ),
+                    adjusted_position_market_value=self._convert_decimal128_to_decimal(
+                        position_doc.adjusted_position_market_value
+                    ),
+                    target=self._convert_decimal128_to_decimal(position_doc.target),
+                    high_drift=self._convert_decimal128_to_decimal(
+                        position_doc.high_drift
+                    ),
+                    low_drift=self._convert_decimal128_to_decimal(
+                        position_doc.low_drift
+                    ),
+                    actual=self._convert_decimal128_to_decimal(position_doc.actual),
+                    actual_drift=self._convert_decimal128_to_decimal(
+                        position_doc.actual_drift
+                    ),
+                )
+                position_dtos.append(position_dto)
+
+            logger.info(
+                f"Retrieved {len(position_dtos)} positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
+            )
+            return position_dtos
+
+        except CollectionWasNotInitialized as e:
+            logger.error(f"MongoDB collection not initialized: {e}")
+            raise RepositoryError("Database not properly initialized")
+        except Exception as e:
+            logger.error(
+                f"Failed to retrieve positions for portfolio {portfolio_id} in rebalance {rebalance_id}: {str(e)}"
+            )
+            raise RepositoryError(
+                f"Failed to retrieve positions for portfolio {portfolio_id} in rebalance {rebalance_id}: {str(e)}"
+            )

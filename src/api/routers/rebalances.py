@@ -20,6 +20,7 @@ from src.infrastructure.database.repositories.rebalance_repository import (
 )
 from src.schemas.rebalance import (
     PortfolioWithPositionsDTO,
+    PositionDTO,
     RebalanceResultDTO,
     RebalancesByPortfoliosRequestDTO,
 )
@@ -242,6 +243,132 @@ async def get_portfolios_by_rebalance_id(
         error_response = PortfolioErrorResponse(
             error="Internal server error",
             message="An error occurred while retrieving portfolio data",
+            status_code=500,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_response.model_dump(),
+        )
+
+
+@router.get(
+    "/rebalance/{rebalance_id}/portfolio/{portfolio_id}/positions",
+    response_model=List[PositionDTO],
+)
+async def get_portfolio_positions(
+    rebalance_id: str,
+    portfolio_id: str,
+    repository: RebalanceRepository = Depends(get_rebalance_repository),
+) -> List[PositionDTO]:
+    """
+    Get all positions for a specific portfolio within a specific rebalance.
+
+    This endpoint provides position-level data for a specific portfolio when
+    users expand portfolio rows in the rebalance results UI for lazy-loading.
+
+    Args:
+        rebalance_id: The unique identifier of the rebalance (MongoDB ObjectId format)
+        portfolio_id: The unique identifier of the portfolio (MongoDB ObjectId format)
+        repository: Rebalance repository dependency
+
+    Returns:
+        List[PositionDTO]: List of positions for the specified portfolio
+
+    Raises:
+        HTTPException: If rebalance or portfolio not found, invalid ID format, or retrieval fails
+    """
+    try:
+        logger.info(
+            f"Retrieving positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
+        )
+
+        # Validate ObjectId formats
+        if not ObjectId.is_valid(rebalance_id):
+            logger.error(f"API: Invalid rebalance ObjectId format: {rebalance_id}")
+            error_response = PortfolioErrorResponse(
+                error="Invalid ID format",
+                message="Rebalance ID and Portfolio ID must be valid MongoDB ObjectIds",
+                status_code=400,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_response.model_dump(),
+            )
+
+        if not ObjectId.is_valid(portfolio_id):
+            logger.error(f"API: Invalid portfolio ObjectId format: {portfolio_id}")
+            error_response = PortfolioErrorResponse(
+                error="Invalid ID format",
+                message="Rebalance ID and Portfolio ID must be valid MongoDB ObjectIds",
+                status_code=400,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_response.model_dump(),
+            )
+
+        # Get positions for the portfolio in the rebalance
+        logger.debug(
+            f"API: Calling repository.get_positions_by_rebalance_and_portfolio_id({rebalance_id}, {portfolio_id})"
+        )
+        positions = await repository.get_positions_by_rebalance_and_portfolio_id(
+            rebalance_id, portfolio_id
+        )
+        logger.debug(f"API: Repository returned: {positions is not None}")
+
+        if positions is None:
+            logger.warning(f"Rebalance {rebalance_id} not found")
+            error_response = PortfolioErrorResponse(
+                error="Rebalance not found",
+                message=f"No rebalance found with ID: {rebalance_id}",
+                status_code=404,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_response.model_dump(),
+            )
+
+        logger.info(
+            f"Retrieved {len(positions)} positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
+        )
+        return positions
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except RepositoryError as e:
+        # Check if this is a portfolio not found error
+        if hasattr(e, 'operation') and e.operation == "portfolio_not_found":
+            logger.warning(
+                f"Portfolio {portfolio_id} not found in rebalance {rebalance_id}"
+            )
+            error_response = PortfolioErrorResponse(
+                error="Portfolio not found",
+                message=f"No portfolio found with ID: {portfolio_id} in rebalance: {rebalance_id}",
+                status_code=404,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_response.model_dump(),
+            )
+        logger.error(
+            f"Repository error retrieving positions for portfolio {portfolio_id} in rebalance {rebalance_id}: {e}"
+        )
+        error_response = PortfolioErrorResponse(
+            error="Internal server error",
+            message="An error occurred while retrieving position data",
+            status_code=500,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_response.model_dump(),
+        )
+    except Exception as e:
+        logger.error(
+            f"Unexpected error retrieving positions for portfolio {portfolio_id} in rebalance {rebalance_id}: {e}"
+        )
+        error_response = PortfolioErrorResponse(
+            error="Internal server error",
+            message="An error occurred while retrieving position data",
             status_code=500,
         )
         raise HTTPException(
