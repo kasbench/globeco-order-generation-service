@@ -398,19 +398,8 @@ def setup_monitoring(app) -> Instrumentator:
     instrumentator.add(metrics.requests())
     instrumentator.add(metrics.latency())
 
-    # Add custom metrics endpoint
-    @app.get("/metrics")
-    async def metrics_endpoint():
-        """
-        Prometheus metrics endpoint.
-
-        Returns:
-            Prometheus metrics in text format
-        """
-        # Update system metrics before returning
-        SystemMonitor.update_system_metrics()
-
-        return Response(content=generate_latest(), media_type="text/plain")
+    # Remove custom /metrics endpoint registration here
+    # /metrics is now mounted globally in main.py via prometheus_client.make_asgi_app()
 
     # Instrument the app
     instrumentator.instrument(app)

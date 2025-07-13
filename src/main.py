@@ -10,9 +10,34 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+# --- OpenTelemetry Instrumentation (GlobeCo Standard) ---
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+    OTLPMetricExporter as OTLPMetricExporterGRPC,
+)
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+    OTLPSpanExporter as OTLPSpanExporterGRPC,
+)
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+    OTLPMetricExporter as OTLPMetricExporterHTTP,
+)
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter as OTLPSpanExporterHTTP,
+)
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_client import make_asgi_app
 
 from src.api.routers.health import router as health_router
 from src.api.routers.models import router as models_router
@@ -28,6 +53,58 @@ from src.core.utils import (
     get_logger,
     set_correlation_id,
 )
+
+# Set OpenTelemetry resource attributes
+resource = Resource.create(
+    {
+        "service.name": "globeco-order-generation-service",
+        # Optionally add version/namespace if desired
+        # "service.version": "0.1.0",
+        # "service.namespace": "globeco",
+    }
+)
+
+# Tracing setup (gRPC and HTTP exporters)
+trace.set_tracer_provider(TracerProvider(resource=resource))
+tracer_provider = trace.get_tracer_provider()
+tracer_provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporterGRPC(
+            endpoint="otel-collector-collector.monitoring.svc.cluster.local:4317",
+            insecure=True,
+        )
+    )
+)
+tracer_provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporterHTTP(
+            endpoint="http://otel-collector-collector.monitoring.svc.cluster.local:4318/v1/traces"
+        )
+    )
+)
+
+# Metrics setup (gRPC and HTTP exporters)
+from opentelemetry.metrics import set_meter_provider
+
+meter_provider = MeterProvider(
+    resource=resource,
+    metric_readers=[
+        PeriodicExportingMetricReader(
+            OTLPMetricExporterGRPC(
+                endpoint="otel-collector-collector.monitoring.svc.cluster.local:4317",
+                insecure=True,
+            )
+        ),
+        PeriodicExportingMetricReader(
+            OTLPMetricExporterHTTP(
+                endpoint="http://otel-collector-collector.monitoring.svc.cluster.local:4318/v1/metrics"
+            )
+        ),
+    ],
+)
+set_meter_provider(meter_provider)
+
+# --- End OpenTelemetry Instrumentation ---
 
 # Configure structured logging early with settings
 settings = get_settings()
@@ -177,6 +254,14 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
+
+    # Instrument FastAPI, HTTPX, and logging for OpenTelemetry
+    FastAPIInstrumentor().instrument_app(app)
+    HTTPXClientInstrumentor().instrument()
+    LoggingInstrumentor().instrument(set_logging_format=True)
+
+    # Mount Prometheus /metrics endpoint (OpenTelemetry standard)
+    app.mount("/metrics", make_asgi_app())
 
     # CORS middleware (first in stack)
     app.add_middleware(
