@@ -1,0 +1,1 @@
+- Updated .pre-commit-config.yaml: Modified the check-yaml hook's exclude pattern to also skip all files in the k8s directory, suppressing YAML syntax errors in k8s/*.yaml during pre-commit hooks, as requested by the user.
