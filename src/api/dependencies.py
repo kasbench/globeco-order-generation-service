@@ -8,6 +8,7 @@ connecting the API layer to the application services, domain layer, and infrastr
 from functools import lru_cache
 from typing import AsyncGenerator
 
+import redis.asyncio as redis
 from fastapi import Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -40,12 +41,20 @@ from src.infrastructure.optimization.cvxpy_solver import CVXPYOptimizationEngine
 
 
 @lru_cache()
+def get_redis_client() -> redis.Redis:
+    """Get Redis client."""
+    settings = get_settings()
+    return redis.from_url(settings.redis_url)
+
+
+@lru_cache()
 def get_security_client() -> SecurityServiceClient:
     """Get Security Service client."""
     settings = get_settings()
     return SecurityServiceClient(
         base_url=settings.security_service_url,
         timeout=settings.external_service_timeout,
+        redis_client=get_redis_client(),
     )
 
 

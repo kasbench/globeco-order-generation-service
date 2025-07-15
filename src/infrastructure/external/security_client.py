@@ -7,8 +7,12 @@ This module provides integration with the Security Service to:
 - Support batch security validation
 """
 
+import asyncio
+import json
 import logging
 from typing import Dict, List
+
+import redis.asyncio as redis
 
 from src.config import get_settings
 from src.core.exceptions import ExternalServiceError
@@ -30,18 +34,25 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
     - Batch security operations
     """
 
-    def __init__(self, base_url: str = None, timeout: float = None):
+    def __init__(
+        self,
+        base_url: str = None,
+        timeout: float = None,
+        redis_client: redis.Redis = None,
+    ):
         """
         Initialize the Security Service client.
 
         Args:
             base_url: Base URL of the Security Service
             timeout: Request timeout in seconds
+            redis_client: Redis client for caching
         """
         settings = get_settings()
 
         self.base_url = base_url or "http://globeco-security-service:8000"
         self.timeout = timeout or settings.external_service_timeout
+        self._redis = redis_client
 
         self._base_client = BaseServiceClient(
             base_url=self.base_url,
@@ -58,39 +69,49 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             security_id: The 24-character security ID to get information for
 
         Returns:
-            Dict with security information: {
-                "id": "STOCK1234567890123456789",
-                "symbol": "AAPL",
-                "name": "Apple Inc.",
-                "type": "STOCK|BOND|ETF|OPTION",
-                "sector": "TECHNOLOGY",
-                "status": "ACTIVE|INACTIVE|DELISTED",
-                "exchange": "NASDAQ",
-                "created_at": "2024-01-01T00:00:00Z"
-            }
+            Dict with security information
 
         Raises:
             ExternalServiceError: If security not found or service error
         """
-        try:
-            logger.debug(f"Getting security metadata for {security_id}")
+        cache_key = f"security:{security_id}"
+        lock_key = f"lock:{cache_key}"
 
-            response = await self._base_client._make_request(
-                "GET", f"/api/v1/security/{security_id}"
-            )
+        # Check cache first
+        cached_data = await self._redis.get(cache_key)
+        if cached_data:
+            logger.debug(f"Cache hit for security {security_id}")
+            return json.loads(cached_data)
 
-            logger.info(
-                f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
-            )
-            return response
+        # Try to acquire a lock
+        lock = self._redis.lock(lock_key, timeout=10)  # 10-second lock timeout
+        if await lock.acquire(blocking_timeout=5):  # Wait up to 5 seconds for the lock
+            try:
+                # Double-check cache after acquiring the lock
+                cached_data = await self._redis.get(cache_key)
+                if cached_data:
+                    logger.debug(
+                        f"Cache hit for security {security_id} after acquiring lock"
+                    )
+                    return json.loads(cached_data)
 
-        except ExternalServiceError:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error getting security metadata: {str(e)}")
-            raise ExternalServiceError(
-                f"Failed to retrieve security metadata: {str(e)}", service="security"
-            )
+                logger.debug(f"Cache miss for security {security_id}. Fetching...")
+                response = await self._base_client._make_request(
+                    "GET", f"/api/v1/security/{security_id}"
+                )
+                logger.info(
+                    f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
+                )
+                await self._redis.set(
+                    cache_key, json.dumps(response), ex=600
+                )  # 10-minute TTL
+                return response
+            finally:
+                await lock.release()
+        else:
+            # If we couldn't acquire the lock, wait for the cache to be populated
+            await asyncio.sleep(0.1)
+            return await self.get_security(security_id)
 
     async def validate_securities(
         self, security_ids: List[str]

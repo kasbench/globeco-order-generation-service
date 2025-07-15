@@ -58,10 +58,9 @@ class PricingServiceClient(ExternalServiceClientProtocol):
             max_retries=3,
         )
 
-        # Initialize security client for ticker lookups
-        self._security_client = security_client or SecurityServiceClient(
-            timeout=self.timeout
-        )
+        if security_client is None:
+            raise ValueError("SecurityServiceClient is required.")
+        self._security_client = security_client
 
     async def get_security_prices(self, security_ids: List[str]) -> Dict[str, Decimal]:
         """

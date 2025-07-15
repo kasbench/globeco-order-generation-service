@@ -66,6 +66,15 @@ class Settings(BaseSettings):
         default=300000, description="Database connection idle timeout in milliseconds"
     )
 
+    # Redis Configuration
+    redis_url: str = Field(
+        default="redis://globeco-order-generation-service-redis:6379/0",
+        description="Redis connection URL",
+    )
+    redis_timeout: int = Field(
+        default=5, description="Redis connection timeout in seconds"
+    )
+
     # External Service URLs
     portfolio_accounting_service_url: str = Field(
         default="http://globeco-portfolio-accounting-service:8087",

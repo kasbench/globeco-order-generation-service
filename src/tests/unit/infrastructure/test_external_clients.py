@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
+import redis.asyncio as redis
 from httpx import AsyncClient, HTTPStatusError, RequestError, TimeoutException
 
 from src.core.exceptions import (
@@ -827,16 +828,25 @@ class TestSecurityServiceClient:
         return AsyncMock(spec=BaseServiceClient)
 
     @pytest_asyncio.fixture
-    async def security_client(self, mock_base_client):
+    async def mock_redis_client(self):
+        """Create a mock redis client for testing."""
+        return AsyncMock(spec=redis.Redis)
+
+    @pytest_asyncio.fixture
+    async def security_client(self, mock_base_client, mock_redis_client):
         """Create a security service client for testing."""
         client = SecurityServiceClient(
-            base_url="http://security-service:8000", timeout=5.0
+            base_url="http://security-service:8000",
+            timeout=5.0,
+            redis_client=mock_redis_client,
         )
         client._base_client = mock_base_client
         return client
 
     @pytest.mark.asyncio
-    async def test_get_security_success(self, security_client, mock_base_client):
+    async def test_get_security_success(
+        self, security_client, mock_base_client, mock_redis_client
+    ):
         """Test successful security metadata retrieval."""
         # Arrange
         security_id = "STOCK1234567890123456789"
@@ -850,6 +860,13 @@ class TestSecurityServiceClient:
         }
         mock_base_client._make_request.return_value = mock_response
 
+        mock_redis_client.get = AsyncMock(return_value=None)
+        mock_redis_client.set = AsyncMock()
+        mock_lock = AsyncMock()
+        mock_lock.acquire = AsyncMock(return_value=True)
+        mock_lock.release = AsyncMock()
+        mock_redis_client.lock.return_value = mock_lock
+
         # Act
         result = await security_client.get_security(security_id)
 
@@ -862,6 +879,9 @@ class TestSecurityServiceClient:
         mock_base_client._make_request.assert_called_once_with(
             "GET", f"/api/v1/security/{security_id}"
         )
+        mock_redis_client.get.assert_called()
+        mock_redis_client.set.assert_called_once()
+        mock_lock.release.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_validate_securities_success(self, security_client, mock_base_client):
