@@ -29,6 +29,8 @@ spec:
       labels:
         app: globeco-order-generation-service-redis
     spec:
+      securityContext:
+        fsGroup: 0
       containers:
         - name: redis
           image: redis:latest
@@ -44,6 +46,9 @@ spec:
             limits:
               cpu: "500m"
               memory: "512Mi"
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
   volumeClaimTemplates:
     - metadata:
         name: redis-data

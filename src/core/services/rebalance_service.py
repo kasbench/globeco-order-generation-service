@@ -769,7 +769,7 @@ class RebalanceService:
             model_id=model.model_id,
             rebalance_date=datetime.now(timezone.utc),
             model_name=model.name,
-            number_of_portfolios=len(rebalance_portfolios),
+            number_of_portfolios=len(portfolio_ids),
             portfolios=rebalance_portfolios,
             version=1,
             created_at=datetime.now(timezone.utc),
