@@ -1,4 +1,36 @@
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: globeco
+data:
+  redis.conf: |
+    # Basic Redis configuration
+    bind 0.0.0.0
+    port 6379
+
+    # Disable RDB snapshots to avoid disk write issues
+    save ""
+    stop-writes-on-bgsave-error no
+
+    # Use AOF for persistence instead (more reliable for K8s)
+    appendonly yes
+    appendfsync everysec
+    appendfilename "appendonly.aof"
+
+    # Set data directory
+    dir /data
+
+    # Logging
+    loglevel notice
+
+    # Memory management
+    maxmemory-policy allkeys-lru
+
+    # Disable protected mode for K8s
+    protected-mode no
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: globeco-order-generation-service-redis
@@ -30,15 +62,20 @@ spec:
         app: globeco-order-generation-service-redis
     spec:
       securityContext:
-        fsGroup: 0
+        fsGroup: 999  # Redis user group
+        runAsNonRoot: true
       containers:
         - name: redis
-          image: redis:latest
+          image: redis:7-alpine
+          command: ["redis-server"]
+          args: ["/etc/redis/redis.conf"]
           ports:
             - containerPort: 6379
           volumeMounts:
             - name: redis-data
               mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis
           resources:
             requests:
               cpu: "50m"
@@ -47,8 +84,26 @@ spec:
               cpu: "500m"
               memory: "512Mi"
           securityContext:
-            runAsUser: 0
-            runAsGroup: 0
+            runAsUser: 999  # Redis user
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
   volumeClaimTemplates:
     - metadata:
         name: redis-data
@@ -57,4 +112,3 @@ spec:
         resources:
           requests:
             storage: 2Gi
-        storageClassName: local-storage
