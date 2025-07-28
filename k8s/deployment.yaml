@@ -44,14 +44,14 @@ spec:
               path: /health/live
               port: 8088
             initialDelaySeconds: 30
-            periodSeconds: 10
+            periodSeconds: 60
             timeoutSeconds: 240
           readinessProbe:
             httpGet:
               path: /health/ready
               port: 8088
             initialDelaySeconds: 10
-            periodSeconds: 5
+            periodSeconds: 30
             timeoutSeconds: 5
           # startupProbe:
           #   httpGet:

@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from src.api.dependencies import get_model_service
 from src.core.exceptions import (
+    BusinessRuleViolationError,
     ModelNotFoundError,
     NotFoundError,
     OptimisticLockingError,
@@ -153,6 +154,13 @@ async def get_model_by_id(
     """Get investment model by ID."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.get_model_by_id(model_id)
     except HTTPException:
         # Re-raise HTTPExceptions from validate_model_id without changing them
@@ -166,11 +174,6 @@ async def get_model_by_id(
         logger.warning("Model not found", model_id=model_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Model {model_id} not found"
-        )
-    except ValueError:
-        logger.warning("Invalid model ID format", model_id=model_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
         )
     except Exception as e:
         logger.error("Failed to retrieve model", model_id=model_id, error=str(e))
@@ -209,7 +212,17 @@ async def update_model(
     """Update an existing investment model."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.update_model(model_id, model_data)
+    except HTTPException:
+        # Re-raise HTTPExceptions from validate_model_id without changing them
+        raise
     except ModelNotFoundError:
         logger.warning("Model not found for update", model_id=model_id)
         raise HTTPException(
@@ -229,11 +242,6 @@ async def update_model(
     except DomainValidationError as e:
         logger.warning("Model validation failed", model_id=model_id, error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValueError:
-        logger.warning("Invalid model ID format", model_id=model_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
-        )
     except Exception as e:
         logger.error("Failed to update model", model_id=model_id, error=str(e))
         raise HTTPException(
@@ -255,6 +263,13 @@ async def add_position(
     """Add a position to an investment model."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.add_position(model_id, position_data)
     except NotFoundError:
         logger.warning("Model not found for position addition", model_id=model_id)
@@ -264,11 +279,6 @@ async def add_position(
     except DomainValidationError as e:
         logger.warning("Position validation failed", model_id=model_id, error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValueError:
-        logger.warning("Invalid model ID format", model_id=model_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
-        )
     except Exception as e:
         logger.error("Failed to add position", model_id=model_id, error=str(e))
         raise HTTPException(
@@ -290,6 +300,13 @@ async def update_position(
     """Update a position in an investment model."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.update_position(model_id, position_data)
     except NotFoundError:
         logger.warning("Model not found for position update", model_id=model_id)
@@ -299,11 +316,6 @@ async def update_position(
     except DomainValidationError as e:
         logger.warning("Position validation failed", model_id=model_id, error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValueError:
-        logger.warning("Invalid model ID format", model_id=model_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
-        )
     except Exception as e:
         logger.error("Failed to update position", model_id=model_id, error=str(e))
         raise HTTPException(
@@ -325,6 +337,13 @@ async def remove_position(
     """Remove a position from an investment model."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.remove_position(model_id, position_data)
     except NotFoundError:
         logger.warning("Model not found for position removal", model_id=model_id)
@@ -334,11 +353,6 @@ async def remove_position(
     except DomainValidationError as e:
         logger.warning("Position validation failed", model_id=model_id, error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValueError:
-        logger.warning("Invalid model ID format", model_id=model_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
-        )
     except Exception as e:
         logger.error("Failed to remove position", model_id=model_id, error=str(e))
         raise HTTPException(
@@ -360,6 +374,13 @@ async def add_portfolios(
     """Add portfolios to an investment model."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.add_portfolios(model_id, portfolio_data)
     except NotFoundError:
         logger.warning("Model not found for portfolio addition", model_id=model_id)
@@ -369,11 +390,6 @@ async def add_portfolios(
     except DomainValidationError as e:
         logger.warning("Portfolio validation failed", model_id=model_id, error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValueError:
-        logger.warning("Invalid model ID format", model_id=model_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
-        )
     except Exception as e:
         logger.error("Failed to add portfolios", model_id=model_id, error=str(e))
         raise HTTPException(
@@ -395,6 +411,13 @@ async def remove_portfolios(
     """Remove portfolios from an investment model."""
     try:
         validate_model_id(model_id)
+    except ValueError:
+        logger.warning("Invalid model ID format", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
+        )
+
+    try:
         return await model_service.remove_portfolios(model_id, portfolio_data)
     except NotFoundError:
         logger.warning("Model not found for portfolio removal", model_id=model_id)
@@ -404,13 +427,73 @@ async def remove_portfolios(
     except DomainValidationError as e:
         logger.warning("Portfolio validation failed", model_id=model_id, error=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to remove portfolios", model_id=model_id, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        )
+
+
+@router.delete(
+    "/model/{model_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_model(
+    model_id: str = Path(..., description="Model ID"),
+    version: int = Query(
+        ..., description="Expected model version for optimistic locking"
+    ),
+    model_service: ModelService = Depends(get_model_service),
+) -> None:
+    """Delete an investment model with optimistic concurrency control."""
+    try:
+        validate_model_id(model_id)
     except ValueError:
         logger.warning("Invalid model ID format", model_id=model_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid model ID format"
         )
+
+    try:
+        deleted = await model_service.delete_model(model_id, version)
+
+        if not deleted:
+            logger.warning("Model deletion failed", model_id=model_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete model",
+            )
+
+    except HTTPException:
+        # Re-raise HTTPExceptions from validate_model_id without changing them
+        raise
+    except ModelNotFoundError:
+        logger.warning("Model not found for deletion", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Model {model_id} not found"
+        )
+    except NotFoundError:
+        logger.warning("Model not found for deletion", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Model {model_id} not found"
+        )
+    except OptimisticLockingError:
+        logger.warning("Optimistic locking conflict during deletion", model_id=model_id)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Model has been modified by another process",
+        )
+    except BusinessRuleViolationError as e:
+        logger.warning(
+            "Business rule violation during deletion", model_id=model_id, error=str(e)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
     except Exception as e:
-        logger.error("Failed to remove portfolios", model_id=model_id, error=str(e))
+        logger.error("Failed to delete model", model_id=model_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",

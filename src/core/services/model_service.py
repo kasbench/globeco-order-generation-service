@@ -228,7 +228,7 @@ class ModelService:
                 )
 
             # Convert DTO to domain entity with updated data
-            updated_model = self._model_mapper.from_put_dto(model_id, update_dto)
+            updated_model = self._model_mapper.from_put_dto(update_dto, model_id)
 
             # Validate business rules
             await self._validation_service.validate_model(updated_model)
@@ -560,4 +560,71 @@ class ModelService:
             raise
         except Exception as e:
             logger.error("Failed to remove portfolios", model_id=model_id, error=str(e))
+            raise
+
+    async def delete_model(self, model_id: str, version: int) -> bool:
+        """Delete an investment model with optimistic concurrency control.
+
+        Args:
+            model_id: The model identifier
+            version: Expected version for optimistic locking
+
+        Returns:
+            True if model was deleted successfully
+
+        Raises:
+            NotFoundError: If model doesn't exist
+            OptimisticLockingError: If version conflict occurs
+            BusinessRuleViolationError: If deletion would violate business rules
+        """
+        logger.info("Deleting model", model_id=model_id, version=version)
+
+        try:
+            # Get existing model to check version
+            existing_model = await self._model_repository.get_by_id(model_id)
+            if not existing_model:
+                logger.warning("Model not found for deletion", model_id=model_id)
+                raise NotFoundError(
+                    message=f"Model {model_id} not found",
+                    entity_type="Model",
+                    entity_id=model_id,
+                )
+
+            # Check version for optimistic locking
+            if existing_model.version != version:
+                logger.warning(
+                    "Version conflict during deletion",
+                    model_id=model_id,
+                    expected_version=version,
+                    current_version=existing_model.version,
+                )
+                raise OptimisticLockingError(
+                    "Model has been modified by another process"
+                )
+
+            # Check business rules before deletion
+            # if existing_model.portfolios:
+            #     logger.warning(
+            #         "Cannot delete model with associated portfolios",
+            #         model_id=model_id,
+            #         portfolio_count=len(existing_model.portfolios),
+            #     )
+            #     raise BusinessRuleViolationError(
+            #         "Cannot delete model with associated portfolios. Remove all portfolios first."
+            #     )
+
+            # Delete the model
+            deleted = await self._model_repository.delete(model_id)
+
+            if deleted:
+                logger.info("Model deleted successfully", model_id=model_id)
+            else:
+                logger.warning("Model deletion failed", model_id=model_id)
+
+            return deleted
+
+        except (NotFoundError, OptimisticLockingError, BusinessRuleViolationError):
+            raise
+        except Exception as e:
+            logger.error("Failed to delete model", model_id=model_id, error=str(e))
             raise
