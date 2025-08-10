@@ -31,7 +31,7 @@ spec:
             - name: OTEL_METRICS_LOGGING_ENABLED
               value: "false"
             - name: LOG_LEVEL
-              value: "info"
+              value: "DEBUG"
           resources:
             requests:
               cpu: "100m"

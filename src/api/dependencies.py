@@ -131,6 +131,7 @@ def get_rebalance_repository(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> MongoRebalanceRepository:
     """Get rebalance repository implementation."""
+    # The db dependency ensures database is initialized before repository creation
     return MongoRebalanceRepository()
 
 

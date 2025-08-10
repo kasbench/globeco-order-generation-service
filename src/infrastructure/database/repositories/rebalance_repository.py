@@ -33,6 +33,15 @@ logger = logging.getLogger(__name__)
 class MongoRebalanceRepository(RebalanceRepository):
     """MongoDB implementation of the Rebalance Repository using Beanie ODM."""
 
+    def _is_beanie_initialized(self) -> bool:
+        """Check if Beanie ODM is properly initialized for RebalanceDocument."""
+        try:
+            # Try to access the motor collection to verify initialization
+            collection = RebalanceDocument.get_motor_collection()
+            return collection is not None
+        except (CollectionWasNotInitialized, AttributeError, RuntimeError):
+            return False
+
     def _convert_decimal128_to_decimal(self, value):
         """Convert Decimal128 to Python Decimal, or return value if already correct type."""
         if isinstance(value, Decimal128):
@@ -229,6 +238,9 @@ class MongoRebalanceRepository(RebalanceRepository):
             logger.debug(
                 f"Repository.get_by_id(): Starting retrieval for rebalance_id={rebalance_id}"
             )
+            logger.debug(
+                f"Repository.get_by_id(): Beanie initialized: {self._is_beanie_initialized()}"
+            )
 
             # Validate ObjectId format
             if not ObjectId.is_valid(rebalance_id):
@@ -249,11 +261,48 @@ class MongoRebalanceRepository(RebalanceRepository):
             logger.debug(
                 f"Repository.get_by_id(): Querying database for raw document..."
             )
-            collection = RebalanceDocument.get_motor_collection()
-            raw_document = await collection.find_one({"_id": object_id})
-            logger.debug(
-                f"Repository.get_by_id(): Raw database query completed, found document: {raw_document is not None}"
-            )
+            try:
+                collection = RebalanceDocument.get_motor_collection()
+                raw_document = await collection.find_one({"_id": object_id})
+                logger.debug(
+                    f"Repository.get_by_id(): Raw database query completed successfully, found document: {raw_document is not None}"
+                )
+            except (CollectionWasNotInitialized, AttributeError, RuntimeError) as e:
+                logger.warning(
+                    f"Repository.get_by_id(): Beanie ODM not properly initialized, falling back to standard method. Error: {str(e)}"
+                )
+                # Fallback to standard Beanie method if get_motor_collection fails
+                try:
+                    document = await RebalanceDocument.get(object_id)
+                    if document is None:
+                        logger.info(
+                            f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
+                        )
+                        return None
+
+                    # Convert Beanie document to dictionary and process normally
+                    logger.debug(
+                        f"Repository.get_by_id(): Converting Beanie document to dict..."
+                    )
+                    raw_document = document.model_dump()
+                    logger.info(
+                        f"Repository.get_by_id(): Successfully retrieved rebalance {rebalance_id} using Beanie fallback method"
+                    )
+                except Exception as fallback_error:
+                    logger.error(
+                        f"Repository.get_by_id(): Both raw and standard Beanie methods failed. Raw error: {str(e)}, Fallback error: {str(fallback_error)}"
+                    )
+                    error_msg = (
+                        f"Database not properly initialized. This may indicate:\n"
+                        f"1. Beanie ODM initialization failed during application startup\n"
+                        f"2. Database connection was lost\n"
+                        f"3. Race condition during application startup\n"
+                        f"Raw method error: {str(e) or 'Unknown error'}\n"
+                        f"Fallback method error: {str(fallback_error) or 'Unknown error'}"
+                    )
+                    raise RepositoryError(
+                        error_msg, operation="get"
+                    ) from fallback_error
 
             if raw_document is None:
                 logger.info(
