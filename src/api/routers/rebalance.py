@@ -47,7 +47,12 @@ async def rebalance_model_portfolios(
     model_id: str = Path(..., description="Model ID"),
     rebalance_service: RebalanceService = Depends(get_rebalance_service),
 ) -> List[RebalanceDTO]:
-    """Rebalance all portfolios associated with an investment model."""
+    """Rebalance all portfolios associated with an investment model.
+
+    Returns a list containing a single RebalanceDTO that aggregates all transactions
+    and drifts from all portfolios in the model. The portfolio_id in the response
+    will be the model_id to indicate this is a model-level rebalance operation.
+    """
     try:
         validate_model_id(model_id)
         return await rebalance_service.rebalance_model_portfolios(model_id)

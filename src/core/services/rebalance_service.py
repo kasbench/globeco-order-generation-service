@@ -187,7 +187,7 @@ class RebalanceService:
             model_id: Investment model identifier
 
         Returns:
-            List of RebalanceDTO objects for each portfolio
+            List containing a single RebalanceDTO representing the entire model rebalance
 
         Raises:
             ModelNotFoundError: If model doesn't exist
@@ -222,7 +222,7 @@ class RebalanceService:
 
             # Execute rebalancing with error isolation
             portfolio_data = {}
-            results = []
+            individual_results = []
             completed_tasks = await asyncio.gather(
                 *rebalance_tasks, return_exceptions=True
             )
@@ -238,22 +238,24 @@ class RebalanceService:
                     )
 
                     # Create empty rebalance result for failed portfolio
-                    # Generate temporary ObjectId (will be updated after persistence)
-                    from bson import ObjectId
-
-                    temp_rebalance_id = str(ObjectId())
-
-                    results.append(
-                        RebalanceDTO(
-                            portfolio_id=portfolio_id,
-                            rebalance_id=temp_rebalance_id,
-                            transactions=[],
-                            drifts=[],
-                        )
+                    individual_results.append(
+                        {
+                            'portfolio_id': portfolio_id,
+                            'transactions': [],
+                            'drifts': [],
+                            'failed': True,
+                        }
                     )
                     portfolio_data[portfolio_id] = None
                 else:
-                    results.append(result['dto'])
+                    individual_results.append(
+                        {
+                            'portfolio_id': portfolio_id,
+                            'transactions': result['data']['transactions'],
+                            'drifts': result['data']['drifts'],
+                            'failed': False,
+                        }
+                    )
                     portfolio_data[portfolio_id] = result['data']
 
             # Update model's last rebalance date
@@ -264,19 +266,37 @@ class RebalanceService:
                 model, model.portfolios, portfolio_data
             )
 
-            # Update all DTOs with the rebalance ID
-            for dto in results:
-                dto.rebalance_id = str(rebalance_record.rebalance_id)
+            # Aggregate all transactions and drifts from all portfolios
+            all_transactions = []
+            all_drifts = []
+
+            for result in individual_results:
+                if not result['failed']:
+                    all_transactions.extend(result['transactions'])
+                    all_drifts.extend(result['drifts'])
+
+            # Create a single RebalanceDTO representing the entire model rebalance
+            # Use the model_id as the portfolio_id to indicate this is a model-level rebalance
+            model_rebalance_dto = RebalanceDTO(
+                portfolio_id=model_id,  # Use model_id to indicate this is a model-level operation
+                rebalance_id=str(rebalance_record.rebalance_id),
+                transactions=all_transactions,
+                drifts=all_drifts,
+            )
 
             logger.info(
                 "Model portfolio rebalancing completed",
                 model_id=model_id,
                 rebalance_id=str(rebalance_record.rebalance_id),
-                successful_portfolios=len([r for r in results if r.transactions]),
-                total_portfolios=len(results),
+                successful_portfolios=len(
+                    [r for r in individual_results if not r['failed']]
+                ),
+                total_portfolios=len(individual_results),
+                total_transactions=len(all_transactions),
+                total_drifts=len(all_drifts),
             )
 
-            return results
+            return [model_rebalance_dto]  # Return single DTO in a list
 
         except ModelNotFoundError:
             raise
