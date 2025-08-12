@@ -37,7 +37,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from prometheus_client import make_asgi_app
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.api.routers.health import router as health_router
 from src.api.routers.models import router as models_router
@@ -260,8 +260,13 @@ def create_app() -> FastAPI:
     HTTPXClientInstrumentor().instrument()
     LoggingInstrumentor().instrument(set_logging_format=True)
 
-    # Mount Prometheus /metrics endpoint (OpenTelemetry standard)
-    app.mount("/metrics", make_asgi_app())
+    # Add Prometheus /metrics endpoint (OpenTelemetry standard)
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus metrics endpoint."""
+        from fastapi import Response
+
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     # CORS middleware (first in stack)
     app.add_middleware(

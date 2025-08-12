@@ -13,6 +13,10 @@ import time
 from typing import Any, Callable, Dict
 
 from fastapi import Request, Response
+
+# OpenTelemetry metrics imports
+from opentelemetry import metrics as otel_metrics
+from opentelemetry.metrics import get_meter
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -21,7 +25,27 @@ from src.core.utils import get_logger
 
 logger = get_logger(__name__)
 
-# Standardized HTTP metrics following OpenTelemetry conventions
+# Get OpenTelemetry meter for creating metrics
+meter = get_meter(__name__)
+
+# OpenTelemetry HTTP metrics (sent to OTEL Collector)
+otel_http_requests_total = meter.create_counter(
+    name="http_requests_total", description="Total number of HTTP requests", unit="1"
+)
+
+otel_http_request_duration = meter.create_histogram(
+    name="http_request_duration",
+    description="HTTP request duration in milliseconds",
+    unit="ms",
+)
+
+otel_http_requests_in_flight = meter.create_up_down_counter(
+    name="http_requests_in_flight",
+    description="Number of HTTP requests currently being processed",
+    unit="1",
+)
+
+# Keep Prometheus metrics for backward compatibility (exposed via /metrics endpoint)
 HTTP_REQUESTS_TOTAL = Counter(
     'http_requests_total',
     'Total number of HTTP requests',
@@ -107,9 +131,10 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         # Start high-precision timing using perf_counter for millisecond precision
         start_time = time.perf_counter()
 
-        # Increment in-flight requests gauge
+        # Increment in-flight requests gauge (both OTEL and Prometheus)
         try:
             HTTP_REQUESTS_IN_FLIGHT.inc()
+            otel_http_requests_in_flight.add(1)
         except Exception as e:
             logger.error(
                 "Failed to increment in-flight requests gauge",
@@ -177,9 +202,10 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
 
             raise
         finally:
-            # Always decrement in-flight requests gauge
+            # Always decrement in-flight requests gauge (both OTEL and Prometheus)
             try:
                 HTTP_REQUESTS_IN_FLIGHT.dec()
+                otel_http_requests_in_flight.add(-1)
             except Exception as e:
                 logger.error(
                     "Failed to decrement in-flight requests gauge",
@@ -192,6 +218,7 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
     ) -> None:
         """
         Record all three HTTP metrics with proper error handling.
+        Records to both OpenTelemetry (sent to OTEL Collector) and Prometheus (exposed via /metrics).
 
         Args:
             method: HTTP method (uppercase)
@@ -199,9 +226,13 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             status: Status code as string
             duration_ms: Request duration in milliseconds
         """
+        # Prepare attributes for OpenTelemetry metrics
+        attributes = {"method": method, "path": path, "status": status}
+
         try:
-            # Record counter metric
+            # Record counter metrics (both OTEL and Prometheus)
             HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
+            otel_http_requests_total.add(1, attributes)
         except Exception as e:
             logger.error(
                 "Failed to record HTTP requests total counter",
@@ -210,10 +241,11 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             )
 
         try:
-            # Record histogram metric with millisecond precision
+            # Record histogram metrics with millisecond precision (both OTEL and Prometheus)
             HTTP_REQUEST_DURATION.labels(
                 method=method, path=path, status=status
             ).observe(duration_ms)
+            otel_http_request_duration.record(duration_ms, attributes)
         except Exception as e:
             logger.error(
                 "Failed to record HTTP request duration histogram",
