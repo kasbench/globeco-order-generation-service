@@ -45,67 +45,138 @@ otel_http_requests_in_flight = meter.create_up_down_counter(
     unit="1",
 )
 
+# Global metrics registry to prevent duplicate registration
+_METRICS_REGISTRY = {}
+
+
+def _get_or_create_metric(
+    metric_class, name, description, labels=None, registry_key=None, **kwargs
+):
+    """Get or create a metric, preventing duplicate registration."""
+    if registry_key is None:
+        registry_key = name
+
+    # Check if metric already exists in our registry
+    if registry_key in _METRICS_REGISTRY:
+        logger.debug(f"Reusing existing metric: {name}")
+        return _METRICS_REGISTRY[registry_key]
+
+    try:
+        if labels:
+            metric = metric_class(name, description, labels, **kwargs)
+        else:
+            metric = metric_class(name, description, **kwargs)
+
+        _METRICS_REGISTRY[registry_key] = metric
+        logger.debug(f"Created new metric: {name}")
+        return metric
+
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            logger.warning(
+                f"Metric {name} already registered in Prometheus, but not in our registry. This indicates a module reload issue."
+            )
+
+            # Create a dummy metric that won't interfere
+            class DummyMetric:
+                def labels(self, **kwargs):
+                    return self
+
+                def inc(self, amount=1):
+                    pass
+
+                def observe(self, amount):
+                    pass
+
+                def set(self, value):
+                    pass
+
+                def collect(self):
+                    return []
+
+            dummy = DummyMetric()
+            _METRICS_REGISTRY[registry_key] = dummy
+            logger.warning(f"Created dummy metric for {name} to prevent errors")
+            return dummy
+        else:
+            logger.error(f"Failed to create metric {name}: {e}")
+            raise
+
+
 # Keep Prometheus metrics for backward compatibility (exposed via /metrics endpoint)
-HTTP_REQUESTS_TOTAL = Counter(
+HTTP_REQUESTS_TOTAL = _get_or_create_metric(
+    Counter,
     'http_requests_total',
     'Total number of HTTP requests',
     ['method', 'path', 'status'],
 )
 
-HTTP_REQUEST_DURATION = Histogram(
+HTTP_REQUEST_DURATION = _get_or_create_metric(
+    Histogram,
     'http_request_duration',
     'HTTP request duration in milliseconds',
     ['method', 'path', 'status'],
     buckets=[5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
 )
 
-HTTP_REQUESTS_IN_FLIGHT = Gauge(
-    'http_requests_in_flight', 'Number of HTTP requests currently being processed'
+HTTP_REQUESTS_IN_FLIGHT = _get_or_create_metric(
+    Gauge,
+    'http_requests_in_flight',
+    'Number of HTTP requests currently being processed',
 )
 
-OPTIMIZATION_DURATION = Histogram(
+OPTIMIZATION_DURATION = _get_or_create_metric(
+    Histogram,
     'optimization_duration_seconds',
     'Portfolio optimization duration in seconds',
     buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0],
 )
 
-OPTIMIZATION_COUNT = Counter(
-    'optimizations_total', 'Total number of optimization requests', ['status']
+OPTIMIZATION_COUNT = _get_or_create_metric(
+    Counter, 'optimizations_total', 'Total number of optimization requests', ['status']
 )
 
-DATABASE_OPERATION_DURATION = Histogram(
+DATABASE_OPERATION_DURATION = _get_or_create_metric(
+    Histogram,
     'database_operation_duration_seconds',
     'Database operation duration in seconds',
     ['operation', 'collection'],
     buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0],
 )
 
-DATABASE_OPERATION_COUNT = Counter(
+DATABASE_OPERATION_COUNT = _get_or_create_metric(
+    Counter,
     'database_operations_total',
     'Total number of database operations',
     ['operation', 'collection', 'status'],
 )
 
-EXTERNAL_SERVICE_DURATION = Histogram(
+EXTERNAL_SERVICE_DURATION = _get_or_create_metric(
+    Histogram,
     'external_service_duration_seconds',
     'External service call duration in seconds',
     ['service', 'endpoint'],
     buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
 )
 
-EXTERNAL_SERVICE_COUNT = Counter(
+EXTERNAL_SERVICE_COUNT = _get_or_create_metric(
+    Counter,
     'external_service_requests_total',
     'Total number of external service requests',
     ['service', 'endpoint', 'status'],
 )
 
-ERROR_COUNT = Counter(
-    'errors_total', 'Total number of errors', ['error_type', 'endpoint']
+ERROR_COUNT = _get_or_create_metric(
+    Counter, 'errors_total', 'Total number of errors', ['error_type', 'endpoint']
 )
 
-MEMORY_USAGE = Gauge('memory_usage_bytes', 'Current memory usage in bytes')
+MEMORY_USAGE = _get_or_create_metric(
+    Gauge, 'memory_usage_bytes', 'Current memory usage in bytes'
+)
 
-CPU_USAGE = Gauge('cpu_usage_percent', 'Current CPU usage percentage')
+CPU_USAGE = _get_or_create_metric(
+    Gauge, 'cpu_usage_percent', 'Current CPU usage percentage'
+)
 
 
 class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
@@ -132,13 +203,29 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         start_time = time.perf_counter()
 
         # Increment in-flight requests gauge (both OTEL and Prometheus)
+        in_flight_incremented = False
         try:
             HTTP_REQUESTS_IN_FLIGHT.inc()
-            otel_http_requests_in_flight.add(1)
+            in_flight_incremented = True
+            logger.debug("Successfully incremented Prometheus in-flight requests gauge")
         except Exception as e:
             logger.error(
-                "Failed to increment in-flight requests gauge",
+                "Failed to increment Prometheus in-flight requests gauge",
                 error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+
+        try:
+            otel_http_requests_in_flight.add(1)
+            logger.debug(
+                "Successfully incremented OpenTelemetry in-flight requests gauge"
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to increment OpenTelemetry in-flight requests gauge",
+                error=str(e),
+                error_type=type(e).__name__,
                 exc_info=True,
             )
 
@@ -181,19 +268,29 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             # Record metrics even when exceptions occur
             self._record_metrics(method, path, status, duration_ms)
 
-            # Record additional error metrics
+            # Record additional error metrics with proper error handling
             try:
                 ERROR_COUNT.labels(error_type=type(e).__name__, endpoint=path).inc()
+                logger.debug(
+                    "Successfully recorded error metrics",
+                    error_type=type(e).__name__,
+                    endpoint=path,
+                )
             except Exception as metric_error:
                 logger.error(
                     "Failed to record error metrics",
                     error=str(metric_error),
+                    error_type=type(metric_error).__name__,
+                    original_error=str(e),
+                    original_error_type=type(e).__name__,
+                    endpoint=path,
                     exc_info=True,
                 )
 
             logger.error(
-                "Request processing error",
+                "Request processing error - metrics collection attempted",
                 error=str(e),
+                error_type=type(e).__name__,
                 method=method,
                 path=path,
                 duration_ms=duration_ms,
@@ -203,13 +300,31 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             # Always decrement in-flight requests gauge (both OTEL and Prometheus)
+            # Only decrement if we successfully incremented to avoid negative values
+            if in_flight_incremented:
+                try:
+                    HTTP_REQUESTS_IN_FLIGHT.dec()
+                    logger.debug(
+                        "Successfully decremented Prometheus in-flight requests gauge"
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to decrement Prometheus in-flight requests gauge",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
+
             try:
-                HTTP_REQUESTS_IN_FLIGHT.dec()
                 otel_http_requests_in_flight.add(-1)
+                logger.debug(
+                    "Successfully decremented OpenTelemetry in-flight requests gauge"
+                )
             except Exception as e:
                 logger.error(
-                    "Failed to decrement in-flight requests gauge",
+                    "Failed to decrement OpenTelemetry in-flight requests gauge",
                     error=str(e),
+                    error_type=type(e).__name__,
                     exc_info=True,
                 )
 
@@ -217,7 +332,7 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         self, method: str, path: str, status: str, duration_ms: float
     ) -> None:
         """
-        Record all three HTTP metrics with proper error handling.
+        Record all three HTTP metrics with comprehensive error handling.
         Records to both OpenTelemetry (sent to OTEL Collector) and Prometheus (exposed via /metrics).
 
         Args:
@@ -229,27 +344,89 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         # Prepare attributes for OpenTelemetry metrics
         attributes = {"method": method, "path": path, "status": status}
 
+        # Debug logging for metric values during development
+        logger.debug(
+            "Recording HTTP metrics",
+            method=method,
+            path=path,
+            status=status,
+            duration_ms=duration_ms,
+            attributes=attributes,
+        )
+
+        # Record counter metrics with individual error handling
         try:
-            # Record counter metrics (both OTEL and Prometheus)
             HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
-            otel_http_requests_total.add(1, attributes)
+            logger.debug(
+                "Successfully recorded Prometheus HTTP requests total counter",
+                method=method,
+                path=path,
+                status=status,
+            )
         except Exception as e:
             logger.error(
-                "Failed to record HTTP requests total counter",
+                "Failed to record Prometheus HTTP requests total counter",
                 error=str(e),
+                error_type=type(e).__name__,
+                method=method,
+                path=path,
+                status=status,
                 exc_info=True,
             )
 
         try:
-            # Record histogram metrics with millisecond precision (both OTEL and Prometheus)
+            otel_http_requests_total.add(1, attributes)
+            logger.debug(
+                "Successfully recorded OpenTelemetry HTTP requests total counter",
+                attributes=attributes,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to record OpenTelemetry HTTP requests total counter",
+                error=str(e),
+                error_type=type(e).__name__,
+                attributes=attributes,
+                exc_info=True,
+            )
+
+        # Record histogram metrics with individual error handling
+        try:
             HTTP_REQUEST_DURATION.labels(
                 method=method, path=path, status=status
             ).observe(duration_ms)
-            otel_http_request_duration.record(duration_ms, attributes)
+            logger.debug(
+                "Successfully recorded Prometheus HTTP request duration histogram",
+                method=method,
+                path=path,
+                status=status,
+                duration_ms=duration_ms,
+            )
         except Exception as e:
             logger.error(
-                "Failed to record HTTP request duration histogram",
+                "Failed to record Prometheus HTTP request duration histogram",
                 error=str(e),
+                error_type=type(e).__name__,
+                method=method,
+                path=path,
+                status=status,
+                duration_ms=duration_ms,
+                exc_info=True,
+            )
+
+        try:
+            otel_http_request_duration.record(duration_ms, attributes)
+            logger.debug(
+                "Successfully recorded OpenTelemetry HTTP request duration histogram",
+                attributes=attributes,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to record OpenTelemetry HTTP request duration histogram",
+                error=str(e),
+                error_type=type(e).__name__,
+                attributes=attributes,
+                duration_ms=duration_ms,
                 exc_info=True,
             )
 
@@ -325,11 +502,23 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             logger.error(
                 "Failed to extract route pattern",
                 error=str(e),
-                path=request.url.path,
+                error_type=type(e).__name__,
+                path=getattr(request.url, 'path', 'unknown'),
+                request_method=getattr(request, 'method', 'unknown'),
                 exc_info=True,
             )
-            # Return sanitized path as fallback
-            return self._sanitize_path(request.url.path)
+            # Return sanitized path as fallback, with additional error handling
+            try:
+                return self._sanitize_path(request.url.path)
+            except Exception as sanitize_error:
+                logger.error(
+                    "Failed to sanitize path as fallback",
+                    error=str(sanitize_error),
+                    error_type=type(sanitize_error).__name__,
+                    original_error=str(e),
+                    exc_info=True,
+                )
+                return "/unknown"
 
     def _sanitize_path(self, path: str) -> str:
         """
@@ -358,7 +547,11 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             return path
         except Exception as e:
             logger.error(
-                "Failed to sanitize path", error=str(e), path=path, exc_info=True
+                "Failed to sanitize path",
+                error=str(e),
+                error_type=type(e).__name__,
+                path=path,
+                exc_info=True,
             )
             return "/"
 
@@ -508,6 +701,7 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             logger.error(
                 "Failed to sanitize unmatched route",
                 error=str(e),
+                error_type=type(e).__name__,
                 path=path,
                 exc_info=True,
             )
@@ -638,10 +832,69 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             logger.error(
                 "Failed to format method label",
                 error=str(e),
+                error_type=type(e).__name__,
                 method=method,
                 exc_info=True,
             )
             return "UNKNOWN"
+
+    def _handle_metrics_collection_failure(
+        self, operation: str, error: Exception, **context
+    ) -> None:
+        """
+        Handle metrics collection failures with structured logging.
+
+        This method provides centralized error handling for metrics collection failures,
+        ensuring that request processing continues even when metrics collection fails.
+
+        Args:
+            operation: The metrics operation that failed (e.g., "record_counter", "record_histogram")
+            error: The exception that occurred
+            **context: Additional context information for logging
+        """
+        try:
+            logger.error(
+                f"Metrics collection failure: {operation}",
+                error=str(error),
+                error_type=type(error).__name__,
+                operation=operation,
+                **context,
+                exc_info=True,
+            )
+
+            # Optionally, record a metric about metrics collection failures
+            # This helps monitor the health of the metrics system itself
+            try:
+                ERROR_COUNT.labels(
+                    error_type="metrics_collection_failure", endpoint="internal"
+                ).inc()
+            except Exception as meta_error:
+                # If we can't even record the metrics failure metric, just log it
+                logger.critical(
+                    "Failed to record metrics collection failure metric",
+                    error=str(meta_error),
+                    error_type=type(meta_error).__name__,
+                    original_operation=operation,
+                    original_error=str(error),
+                    exc_info=True,
+                )
+
+        except Exception as logging_error:
+            # Last resort: if even logging fails, try to print to stderr
+            try:
+                import sys
+
+                print(
+                    f"CRITICAL: Failed to handle metrics collection failure: {logging_error}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"Original metrics operation: {operation}, error: {error}",
+                    file=sys.stderr,
+                )
+            except Exception:
+                # If even stderr printing fails, there's nothing more we can do
+                pass
 
 
 # Keep the original MetricsMiddleware for backward compatibility during transition
@@ -665,8 +918,21 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         """
         start_time = time.perf_counter()
 
-        # Increment in-flight requests
-        HTTP_REQUESTS_IN_FLIGHT.inc()
+        # Increment in-flight requests with error handling
+        in_flight_incremented = False
+        try:
+            HTTP_REQUESTS_IN_FLIGHT.inc()
+            in_flight_incremented = True
+            logger.debug(
+                "Successfully incremented in-flight requests gauge (legacy middleware)"
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to increment in-flight requests gauge (legacy middleware)",
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
 
         try:
             # Process request
@@ -680,11 +946,50 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             path = self._get_endpoint_label(request)
             status = str(response.status_code)
 
-            HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
+            # Record metrics with error handling
+            try:
+                HTTP_REQUESTS_TOTAL.labels(
+                    method=method, path=path, status=status
+                ).inc()
+                logger.debug(
+                    "Successfully recorded HTTP requests total (legacy middleware)",
+                    method=method,
+                    path=path,
+                    status=status,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to record HTTP requests total (legacy middleware)",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    method=method,
+                    path=path,
+                    status=status,
+                    exc_info=True,
+                )
 
-            HTTP_REQUEST_DURATION.labels(
-                method=method, path=path, status=status
-            ).observe(duration_ms)
+            try:
+                HTTP_REQUEST_DURATION.labels(
+                    method=method, path=path, status=status
+                ).observe(duration_ms)
+                logger.debug(
+                    "Successfully recorded HTTP request duration (legacy middleware)",
+                    method=method,
+                    path=path,
+                    status=status,
+                    duration_ms=duration_ms,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to record HTTP request duration (legacy middleware)",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    method=method,
+                    path=path,
+                    status=status,
+                    duration_ms=duration_ms,
+                    exc_info=True,
+                )
 
             # Log slow requests (> 1000ms)
             if duration_ms > 1000:
@@ -705,18 +1010,76 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             path = self._get_endpoint_label(request)
             status = "500"
 
-            HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
+            # Record metrics with error handling
+            try:
+                HTTP_REQUESTS_TOTAL.labels(
+                    method=method, path=path, status=status
+                ).inc()
+                logger.debug(
+                    "Successfully recorded HTTP requests total for error (legacy middleware)",
+                    method=method,
+                    path=path,
+                    status=status,
+                )
+            except Exception as metric_error:
+                logger.error(
+                    "Failed to record HTTP requests total for error (legacy middleware)",
+                    error=str(metric_error),
+                    error_type=type(metric_error).__name__,
+                    method=method,
+                    path=path,
+                    status=status,
+                    original_error=str(e),
+                    exc_info=True,
+                )
 
-            HTTP_REQUEST_DURATION.labels(
-                method=method, path=path, status=status
-            ).observe(duration_ms)
+            try:
+                HTTP_REQUEST_DURATION.labels(
+                    method=method, path=path, status=status
+                ).observe(duration_ms)
+                logger.debug(
+                    "Successfully recorded HTTP request duration for error (legacy middleware)",
+                    method=method,
+                    path=path,
+                    status=status,
+                    duration_ms=duration_ms,
+                )
+            except Exception as metric_error:
+                logger.error(
+                    "Failed to record HTTP request duration for error (legacy middleware)",
+                    error=str(metric_error),
+                    error_type=type(metric_error).__name__,
+                    method=method,
+                    path=path,
+                    status=status,
+                    duration_ms=duration_ms,
+                    original_error=str(e),
+                    exc_info=True,
+                )
 
-            # Record error metrics
-            ERROR_COUNT.labels(error_type=type(e).__name__, endpoint=path).inc()
+            # Record error metrics with error handling
+            try:
+                ERROR_COUNT.labels(error_type=type(e).__name__, endpoint=path).inc()
+                logger.debug(
+                    "Successfully recorded error count (legacy middleware)",
+                    error_type=type(e).__name__,
+                    endpoint=path,
+                )
+            except Exception as metric_error:
+                logger.error(
+                    "Failed to record error count (legacy middleware)",
+                    error=str(metric_error),
+                    error_type=type(metric_error).__name__,
+                    original_error=str(e),
+                    original_error_type=type(e).__name__,
+                    endpoint=path,
+                    exc_info=True,
+                )
 
             logger.error(
-                "Request processing error",
+                "Request processing error - metrics collection attempted (legacy middleware)",
                 error=str(e),
+                error_type=type(e).__name__,
                 method=method,
                 path=path,
                 duration_ms=duration_ms,
@@ -725,8 +1088,21 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
             raise
         finally:
-            # Decrement in-flight requests
-            HTTP_REQUESTS_IN_FLIGHT.dec()
+            # Decrement in-flight requests with error handling
+            # Only decrement if we successfully incremented to avoid negative values
+            if in_flight_incremented:
+                try:
+                    HTTP_REQUESTS_IN_FLIGHT.dec()
+                    logger.debug(
+                        "Successfully decremented in-flight requests gauge (legacy middleware)"
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to decrement in-flight requests gauge (legacy middleware)",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True,
+                    )
 
     def _get_endpoint_label(self, request: Request) -> str:
         """
@@ -782,14 +1158,54 @@ class PerformanceMonitor:
                 return result
             except Exception as e:
                 status = "error"
-                logger.error("Optimization failed", error=str(e), exc_info=True)
+                logger.error(
+                    "Optimization failed",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
                 raise
             finally:
                 duration = time.time() - start_time
-                OPTIMIZATION_DURATION.observe(duration)
-                OPTIMIZATION_COUNT.labels(status=status).inc()
 
-                logger.info("Optimization completed", duration=duration, status=status)
+                # Record metrics with error handling
+                try:
+                    OPTIMIZATION_DURATION.observe(duration)
+                    logger.debug(
+                        "Successfully recorded optimization duration",
+                        duration=duration,
+                        status=status,
+                    )
+                except Exception as metric_error:
+                    logger.error(
+                        "Failed to record optimization duration metric",
+                        error=str(metric_error),
+                        error_type=type(metric_error).__name__,
+                        duration=duration,
+                        status=status,
+                        exc_info=True,
+                    )
+
+                try:
+                    OPTIMIZATION_COUNT.labels(status=status).inc()
+                    logger.debug(
+                        "Successfully recorded optimization count",
+                        status=status,
+                    )
+                except Exception as metric_error:
+                    logger.error(
+                        "Failed to record optimization count metric",
+                        error=str(metric_error),
+                        error_type=type(metric_error).__name__,
+                        status=status,
+                        exc_info=True,
+                    )
+
+                logger.info(
+                    "Optimization completed - metrics collection attempted",
+                    duration=duration,
+                    status=status,
+                )
 
         return wrapper
 
@@ -823,26 +1239,64 @@ class PerformanceMonitor:
 
                 duration = time.time() - self.start_time
 
-                DATABASE_OPERATION_DURATION.labels(
-                    operation=self.operation, collection=self.collection
-                ).observe(duration)
+                # Record database operation duration with error handling
+                try:
+                    DATABASE_OPERATION_DURATION.labels(
+                        operation=self.operation, collection=self.collection
+                    ).observe(duration)
+                    logger.debug(
+                        "Successfully recorded database operation duration",
+                        operation=self.operation,
+                        collection=self.collection,
+                        duration=duration,
+                        status=self.status,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to record database operation duration metric",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        operation=self.operation,
+                        collection=self.collection,
+                        duration=duration,
+                        status=self.status,
+                        exc_info=True,
+                    )
 
-                DATABASE_OPERATION_COUNT.labels(
-                    operation=self.operation,
-                    collection=self.collection,
-                    status=self.status,
-                ).inc()
+                # Record database operation count with error handling
+                try:
+                    DATABASE_OPERATION_COUNT.labels(
+                        operation=self.operation,
+                        collection=self.collection,
+                        status=self.status,
+                    ).inc()
+                    logger.debug(
+                        "Successfully recorded database operation count",
+                        operation=self.operation,
+                        collection=self.collection,
+                        status=self.status,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to record database operation count metric",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        operation=self.operation,
+                        collection=self.collection,
+                        status=self.status,
+                        exc_info=True,
+                    )
 
                 if self.status == "error":
                     logger.error(
-                        "Database operation failed",
+                        "Database operation failed - metrics collection attempted",
                         operation=self.operation,
                         collection=self.collection,
                         duration=duration,
                     )
                 elif duration > 0.1:  # Log slow database operations
                     logger.warning(
-                        "Slow database operation",
+                        "Slow database operation detected - metrics collection attempted",
                         operation=self.operation,
                         collection=self.collection,
                         duration=duration,
@@ -880,24 +1334,62 @@ class PerformanceMonitor:
 
                 duration = time.time() - self.start_time
 
-                EXTERNAL_SERVICE_DURATION.labels(
-                    service=self.service, endpoint=self.endpoint
-                ).observe(duration)
+                # Record external service duration with error handling
+                try:
+                    EXTERNAL_SERVICE_DURATION.labels(
+                        service=self.service, endpoint=self.endpoint
+                    ).observe(duration)
+                    logger.debug(
+                        "Successfully recorded external service duration",
+                        service=self.service,
+                        endpoint=self.endpoint,
+                        duration=duration,
+                        status=self.status,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to record external service duration metric",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        service=self.service,
+                        endpoint=self.endpoint,
+                        duration=duration,
+                        status=self.status,
+                        exc_info=True,
+                    )
 
-                EXTERNAL_SERVICE_COUNT.labels(
-                    service=self.service, endpoint=self.endpoint, status=self.status
-                ).inc()
+                # Record external service count with error handling
+                try:
+                    EXTERNAL_SERVICE_COUNT.labels(
+                        service=self.service, endpoint=self.endpoint, status=self.status
+                    ).inc()
+                    logger.debug(
+                        "Successfully recorded external service count",
+                        service=self.service,
+                        endpoint=self.endpoint,
+                        status=self.status,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to record external service count metric",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        service=self.service,
+                        endpoint=self.endpoint,
+                        status=self.status,
+                        exc_info=True,
+                    )
 
                 if self.status == "error":
                     logger.error(
-                        "External service call failed",
+                        "External service call failed - metrics collection attempted",
                         service=self.service,
                         endpoint=self.endpoint,
                         duration=duration,
                     )
                 elif duration > 5.0:  # Log slow external service calls
                     logger.warning(
-                        "Slow external service call",
+                        "Slow external service call detected - metrics collection attempted",
                         service=self.service,
                         endpoint=self.endpoint,
                         duration=duration,
@@ -964,17 +1456,18 @@ def setup_monitoring(app) -> Instrumentator:
         should_group_status_codes=False,
         should_ignore_untemplated=True,
         should_respect_env_var=False,  # Use settings instead of env var
-        should_instrument_requests_inprogress=True,
-        excluded_handlers=["/metrics", "/health", "/health/live", "/health/ready"],
+        should_instrument_requests_inprogress=False,  # We use our own in-flight tracking
+        excluded_handlers=[
+            "/metrics"
+        ],  # Only exclude metrics endpoint, let our middleware handle health
         inprogress_name="http_requests_inprogress",
         inprogress_labels=True,
     )
 
-    # Add default metrics
-    instrumentator.add(metrics.default())
-    instrumentator.add(metrics.combined_size())
-    instrumentator.add(metrics.requests())
-    instrumentator.add(metrics.latency())
+    # Add only non-conflicting metrics
+    # Note: We use our custom EnhancedHTTPMetricsMiddleware for HTTP request metrics
+    # Only add metrics that don't conflict with our custom implementation
+    instrumentator.add(metrics.combined_size())  # Request/response size metrics
 
     # Remove custom /metrics endpoint registration here
     # /metrics is now mounted globally in main.py via prometheus_client.make_asgi_app()

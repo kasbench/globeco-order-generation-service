@@ -156,7 +156,7 @@ EXPOSE 8088
 
 # Configure health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD /app/.venv/bin/python -c "import requests; requests.get('http://globeco-order-generation-service:8088/health/live', timeout=5)" || exit 1
+    CMD /app/.venv/bin/python -c "import requests; requests.get('http://localhost:8088/health/live', timeout=5)" || exit 1
 
 # Production entrypoint with proper signal handling
 ENTRYPOINT ["tini", "--"]

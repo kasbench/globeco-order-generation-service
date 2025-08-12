@@ -1,18 +1,13 @@
 #!/bin/bash
 set -e
 
-# Convert LOG_LEVEL to lowercase for gunicorn
-GUNICORN_LOG_LEVEL=$(echo "${LOG_LEVEL:-INFO}" | tr '[:upper:]' '[:lower:]')
+# Convert LOG_LEVEL to lowercase for uvicorn
+UVICORN_LOG_LEVEL=$(echo "${LOG_LEVEL:-INFO}" | tr '[:upper:]' '[:lower:]')
 
-# Start gunicorn with proper log level
-exec /app/.venv/bin/gunicorn src.main:app \
-     --worker-class uvicorn.workers.UvicornWorker \
-     --workers 4 \
-     --bind 0.0.0.0:${PORT:-8088} \
-     --access-logfile - \
-     --error-logfile - \
-     --log-level "$GUNICORN_LOG_LEVEL" \
-     --timeout 30 \
-     --keep-alive 2 \
-     --max-requests 1000 \
-     --max-requests-jitter 100
+# Start uvicorn directly (single process for consistent metrics)
+exec /app/.venv/bin/uvicorn src.main:app \
+     --host 0.0.0.0 \
+     --port ${PORT:-8088} \
+     --log-level "$UVICORN_LOG_LEVEL" \
+     --access-log \
+     --no-use-colors
