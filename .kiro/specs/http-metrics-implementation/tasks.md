@@ -7,7 +7,7 @@
   - Ensure metrics use proper types (Counter, Histogram, Gauge)
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 3.1, 3.2, 3.3_
 
-- [ ] 2. Implement enhanced HTTP metrics middleware with proper timing and in-flight tracking
+- [x] 2. Implement enhanced HTTP metrics middleware with proper timing and in-flight tracking
   - Create `EnhancedHTTPMetricsMiddleware` class to replace existing `MetricsMiddleware`
   - Implement millisecond-precision timing using `time.perf_counter()`
   - Add in-flight request tracking with gauge increment/decrement

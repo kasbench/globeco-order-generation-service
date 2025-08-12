@@ -84,9 +84,254 @@ MEMORY_USAGE = Gauge('memory_usage_bytes', 'Current memory usage in bytes')
 CPU_USAGE = Gauge('cpu_usage_percent', 'Current CPU usage percentage')
 
 
+class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
+    """
+    Enhanced middleware to collect standardized HTTP request metrics.
+
+    This middleware implements the standardized HTTP metrics with proper timing,
+    in-flight tracking, and comprehensive error handling as specified in the
+    HTTP metrics implementation requirements.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """
+        Process request and collect all three standardized HTTP metrics.
+
+        Args:
+            request: The incoming request
+            call_next: The next middleware/endpoint to call
+
+        Returns:
+            Response with metrics recorded
+        """
+        # Start high-precision timing using perf_counter for millisecond precision
+        start_time = time.perf_counter()
+
+        # Increment in-flight requests gauge
+        try:
+            HTTP_REQUESTS_IN_FLIGHT.inc()
+        except Exception as e:
+            logger.error(
+                "Failed to increment in-flight requests gauge",
+                error=str(e),
+                exc_info=True,
+            )
+
+        try:
+            # Process request
+            response = await call_next(request)
+
+            # Calculate duration in milliseconds with high precision
+            duration_ms = (time.perf_counter() - start_time) * 1000
+
+            # Extract labels for metrics
+            method = self._get_method_label(request.method)
+            path = self._extract_route_pattern(request)
+            status = self._format_status_code(response.status_code)
+
+            # Record all three metrics with proper error handling
+            self._record_metrics(method, path, status, duration_ms)
+
+            # Log slow requests (> 1000ms)
+            if duration_ms > 1000:
+                logger.warning(
+                    "Slow request detected",
+                    method=method,
+                    path=path,
+                    duration_ms=duration_ms,
+                    status=status,
+                )
+
+            return response
+
+        except Exception as e:
+            # Calculate duration even for exceptions
+            duration_ms = (time.perf_counter() - start_time) * 1000
+
+            # Extract labels for error metrics
+            method = self._get_method_label(request.method)
+            path = self._extract_route_pattern(request)
+            status = "500"  # All exceptions result in 500 status for metrics
+
+            # Record metrics even when exceptions occur
+            self._record_metrics(method, path, status, duration_ms)
+
+            # Record additional error metrics
+            try:
+                ERROR_COUNT.labels(error_type=type(e).__name__, endpoint=path).inc()
+            except Exception as metric_error:
+                logger.error(
+                    "Failed to record error metrics",
+                    error=str(metric_error),
+                    exc_info=True,
+                )
+
+            logger.error(
+                "Request processing error",
+                error=str(e),
+                method=method,
+                path=path,
+                duration_ms=duration_ms,
+                exc_info=True,
+            )
+
+            raise
+        finally:
+            # Always decrement in-flight requests gauge
+            try:
+                HTTP_REQUESTS_IN_FLIGHT.dec()
+            except Exception as e:
+                logger.error(
+                    "Failed to decrement in-flight requests gauge",
+                    error=str(e),
+                    exc_info=True,
+                )
+
+    def _record_metrics(
+        self, method: str, path: str, status: str, duration_ms: float
+    ) -> None:
+        """
+        Record all three HTTP metrics with proper error handling.
+
+        Args:
+            method: HTTP method (uppercase)
+            path: Route pattern
+            status: Status code as string
+            duration_ms: Request duration in milliseconds
+        """
+        try:
+            # Record counter metric
+            HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
+        except Exception as e:
+            logger.error(
+                "Failed to record HTTP requests total counter",
+                error=str(e),
+                exc_info=True,
+            )
+
+        try:
+            # Record histogram metric with millisecond precision
+            HTTP_REQUEST_DURATION.labels(
+                method=method, path=path, status=status
+            ).observe(duration_ms)
+        except Exception as e:
+            logger.error(
+                "Failed to record HTTP request duration histogram",
+                error=str(e),
+                exc_info=True,
+            )
+
+    def _extract_route_pattern(self, request: Request) -> str:
+        """
+        Extract route pattern from request URL to prevent high cardinality metrics.
+
+        Converts URLs with parameters to route patterns (e.g., /api/models/123 -> /api/models/{model_id})
+
+        Args:
+            request: The HTTP request
+
+        Returns:
+            Route pattern string with parameters replaced by placeholders
+        """
+        try:
+            path = request.url.path.rstrip(
+                '/'
+            )  # Remove trailing slash for consistent matching
+
+            # Handle API v1 models endpoints
+            if path.startswith("/api/v1/models"):
+                if path == "/api/v1/models":
+                    return "/api/v1/models"
+                # Check if it has an ID parameter
+                parts = path.split("/")
+                if len(parts) >= 5:  # /api/v1/models/{id}/something
+                    if len(parts) > 5:
+                        # Handle sub-resources like /api/v1/models/{id}/action
+                        return f"/api/v1/models/{{model_id}}/{'/'.join(parts[5:])}"
+                    else:
+                        # Just /api/v1/models/{id}
+                        return "/api/v1/models/{model_id}"
+                elif len(parts) == 5:  # /api/v1/models/{id}
+                    return "/api/v1/models/{model_id}"
+                return "/api/v1/models"
+
+            # Handle rebalance endpoints
+            if path.startswith("/api/v1/rebalance"):
+                if path == "/api/v1/rebalance":
+                    return "/api/v1/rebalance"
+                return "/api/v1/rebalance/{portfolio_id}"
+
+            # Handle health check endpoints
+            if path.startswith("/health"):
+                if path == "/health":
+                    return "/health"
+                parts = path.split("/")
+                if len(parts) >= 3:
+                    return f"/health/{{{parts[2]}_type}}"
+                return "/health/{check_type}"
+
+            # Return path as-is for other endpoints (metrics, docs, etc.)
+            return path
+
+        except Exception as e:
+            logger.error(
+                "Failed to extract route pattern",
+                error=str(e),
+                path=request.url.path,
+                exc_info=True,
+            )
+            # Return sanitized path as fallback
+            return request.url.path
+
+    def _format_status_code(self, status_code: int) -> str:
+        """
+        Format HTTP status code as string for consistent labeling.
+
+        Args:
+            status_code: Numeric HTTP status code
+
+        Returns:
+            Status code as string
+        """
+        try:
+            return str(status_code)
+        except Exception as e:
+            logger.error(
+                "Failed to format status code",
+                error=str(e),
+                status_code=status_code,
+                exc_info=True,
+            )
+            return "unknown"
+
+    def _get_method_label(self, method: str) -> str:
+        """
+        Get uppercase HTTP method name for consistent labeling.
+
+        Args:
+            method: HTTP method string
+
+        Returns:
+            Uppercase HTTP method string
+        """
+        try:
+            return method.upper()
+        except Exception as e:
+            logger.error(
+                "Failed to format method label",
+                error=str(e),
+                method=method,
+                exc_info=True,
+            )
+            return "UNKNOWN"
+
+
+# Keep the original MetricsMiddleware for backward compatibility during transition
 class MetricsMiddleware(BaseHTTPMiddleware):
     """
-    Middleware to collect HTTP request metrics.
+    Legacy middleware to collect HTTP request metrics.
+
+    This class is kept for backward compatibility. Use EnhancedHTTPMetricsMiddleware instead.
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

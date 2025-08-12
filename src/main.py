@@ -44,7 +44,7 @@ from src.api.routers.models import router as models_router
 from src.api.routers.rebalance import router as rebalance_router
 from src.api.routers.rebalances import router as rebalances_router
 from src.config import get_settings
-from src.core.monitoring import MetricsMiddleware, setup_monitoring
+from src.core.monitoring import EnhancedHTTPMetricsMiddleware, setup_monitoring
 from src.core.security import SecurityHeaders
 from src.core.utils import (
     configure_structured_logging,
@@ -274,7 +274,7 @@ def create_app() -> FastAPI:
 
     # Add custom middleware
     if settings.enable_metrics:
-        app.add_middleware(MetricsMiddleware)
+        app.add_middleware(EnhancedHTTPMetricsMiddleware)
     app.middleware("http")(correlation_middleware)
     app.middleware("http")(security_headers_middleware)
 
