@@ -21,21 +21,23 @@ from src.core.utils import get_logger
 
 logger = get_logger(__name__)
 
-# Prometheus metrics
-REQUEST_COUNT = Counter(
+# Standardized HTTP metrics following OpenTelemetry conventions
+HTTP_REQUESTS_TOTAL = Counter(
     'http_requests_total',
     'Total number of HTTP requests',
-    ['method', 'endpoint', 'status_code'],
+    ['method', 'path', 'status'],
 )
 
-REQUEST_DURATION = Histogram(
-    'http_request_duration_seconds',
-    'HTTP request duration in seconds',
-    ['method', 'endpoint'],
-    buckets=[0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0],
+HTTP_REQUEST_DURATION = Histogram(
+    'http_request_duration',
+    'HTTP request duration in milliseconds',
+    ['method', 'path', 'status'],
+    buckets=[5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
 )
 
-ACTIVE_CONNECTIONS = Gauge('active_connections', 'Number of active connections')
+HTTP_REQUESTS_IN_FLIGHT = Gauge(
+    'http_requests_in_flight', 'Number of HTTP requests currently being processed'
+)
 
 OPTIMIZATION_DURATION = Histogram(
     'optimization_duration_seconds',
@@ -98,57 +100,70 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         Returns:
             Response with metrics recorded
         """
-        start_time = time.time()
+        start_time = time.perf_counter()
 
-        # Increment active connections
-        ACTIVE_CONNECTIONS.inc()
+        # Increment in-flight requests
+        HTTP_REQUESTS_IN_FLIGHT.inc()
 
         try:
             # Process request
             response = await call_next(request)
 
             # Record metrics
-            duration = time.time() - start_time
-            method = request.method
-            endpoint = self._get_endpoint_label(request)
-            status_code = str(response.status_code)
+            duration_ms = (
+                time.perf_counter() - start_time
+            ) * 1000  # Convert to milliseconds
+            method = request.method.upper()  # Ensure uppercase method
+            path = self._get_endpoint_label(request)
+            status = str(response.status_code)
 
-            REQUEST_COUNT.labels(
-                method=method, endpoint=endpoint, status_code=status_code
-            ).inc()
+            HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
 
-            REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
+            HTTP_REQUEST_DURATION.labels(
+                method=method, path=path, status=status
+            ).observe(duration_ms)
 
-            # Log slow requests
-            if duration > 1.0:
+            # Log slow requests (> 1000ms)
+            if duration_ms > 1000:
                 logger.warning(
                     "Slow request detected",
                     method=method,
-                    endpoint=endpoint,
-                    duration=duration,
-                    status_code=status_code,
+                    path=path,
+                    duration_ms=duration_ms,
+                    status=status,
                 )
 
             return response
 
         except Exception as e:
+            # Record error metrics with 500 status for exceptions
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            method = request.method.upper()
+            path = self._get_endpoint_label(request)
+            status = "500"
+
+            HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status=status).inc()
+
+            HTTP_REQUEST_DURATION.labels(
+                method=method, path=path, status=status
+            ).observe(duration_ms)
+
             # Record error metrics
-            ERROR_COUNT.labels(
-                error_type=type(e).__name__, endpoint=self._get_endpoint_label(request)
-            ).inc()
+            ERROR_COUNT.labels(error_type=type(e).__name__, endpoint=path).inc()
 
             logger.error(
                 "Request processing error",
                 error=str(e),
-                method=request.method,
-                endpoint=self._get_endpoint_label(request),
+                method=method,
+                path=path,
+                duration_ms=duration_ms,
                 exc_info=True,
             )
 
             raise
         finally:
-            # Decrement active connections
-            ACTIVE_CONNECTIONS.dec()
+            # Decrement in-flight requests
+            HTTP_REQUESTS_IN_FLIGHT.dec()
 
     def _get_endpoint_label(self, request: Request) -> str:
         """
@@ -429,14 +444,17 @@ def get_health_metrics() -> Dict[str, Any]:
                 "percent": memory.percent,
             },
             "cpu": {"percent": cpu_percent},
-            "active_connections": ACTIVE_CONNECTIONS._value._value,
+            "http_requests_in_flight": HTTP_REQUESTS_IN_FLIGHT._value._value,
         }
     except ImportError:
         logger.warning("psutil not available for health metrics")
         return {
-            "active_connections": ACTIVE_CONNECTIONS._value._value,
+            "http_requests_in_flight": HTTP_REQUESTS_IN_FLIGHT._value._value,
             "system_metrics": "unavailable",
         }
     except Exception as e:
         logger.error("Failed to get health metrics", error=str(e))
-        return {"active_connections": ACTIVE_CONNECTIONS._value._value, "error": str(e)}
+        return {
+            "http_requests_in_flight": HTTP_REQUESTS_IN_FLIGHT._value._value,
+            "error": str(e),
+        }

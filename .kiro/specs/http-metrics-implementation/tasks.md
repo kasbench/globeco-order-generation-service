@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Implement standardized HTTP metrics with correct naming and buckets
+- [x] 1. Implement standardized HTTP metrics with correct naming and buckets
   - Replace existing metrics in `src/core/monitoring.py` with standardized versions
   - Use exact metric names: `http_requests_total`, `http_request_duration`, `http_requests_in_flight`
   - Configure histogram with millisecond buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
