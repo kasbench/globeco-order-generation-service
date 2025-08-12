@@ -15,7 +15,7 @@
   - Ensure metrics are recorded even when exceptions occur
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 3. Implement route pattern extraction and label formatting
+- [x] 3. Implement route pattern extraction and label formatting
   - Create `_extract_route_pattern()` method to convert URLs to route patterns
   - Handle FastAPI parameterized routes (e.g., `/api/v1/models/{model_id}`)
   - Implement proper label formatting: uppercase methods, string status codes

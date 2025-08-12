@@ -225,7 +225,8 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         """
         Extract route pattern from request URL to prevent high cardinality metrics.
 
-        Converts URLs with parameters to route patterns (e.g., /api/models/123 -> /api/models/{model_id})
+        Converts URLs with parameters to route patterns (e.g., /api/v1/models/123 -> /api/v1/models/{model_id})
+        Handles FastAPI parameterized routes and sanitizes sensitive data from paths.
 
         Args:
             request: The HTTP request
@@ -238,40 +239,55 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
                 '/'
             )  # Remove trailing slash for consistent matching
 
+            # Handle empty path
+            if not path:
+                return "/"
+
+            # Sanitize sensitive data from paths (remove query parameters and fragments)
+            path = self._sanitize_path(path)
+
             # Handle API v1 models endpoints
             if path.startswith("/api/v1/models"):
-                if path == "/api/v1/models":
-                    return "/api/v1/models"
-                # Check if it has an ID parameter
-                parts = path.split("/")
-                if len(parts) >= 5:  # /api/v1/models/{id}/something
-                    if len(parts) > 5:
-                        # Handle sub-resources like /api/v1/models/{id}/action
-                        return f"/api/v1/models/{{model_id}}/{'/'.join(parts[5:])}"
-                    else:
-                        # Just /api/v1/models/{id}
-                        return "/api/v1/models/{model_id}"
-                elif len(parts) == 5:  # /api/v1/models/{id}
-                    return "/api/v1/models/{model_id}"
-                return "/api/v1/models"
+                return self._extract_models_route_pattern(path)
 
-            # Handle rebalance endpoints
+            # Handle API v1 model endpoints (singular)
+            if path.startswith("/api/v1/model"):
+                return self._extract_model_route_pattern(path)
+
+            # Handle API v1 rebalance endpoints (plural - from rebalances.py)
+            if path.startswith("/api/v1/rebalances"):
+                return self._extract_rebalances_route_pattern(path)
+
+            # Handle API v1 portfolio endpoints
+            if path.startswith("/api/v1/portfolio"):
+                return self._extract_portfolio_route_pattern(path)
+
+            # Handle API v1 rebalance endpoints (singular - from rebalance.py)
             if path.startswith("/api/v1/rebalance"):
-                if path == "/api/v1/rebalance":
-                    return "/api/v1/rebalance"
-                return "/api/v1/rebalance/{portfolio_id}"
+                return self._extract_rebalance_route_pattern(path)
 
             # Handle health check endpoints
             if path.startswith("/health"):
-                if path == "/health":
-                    return "/health"
-                parts = path.split("/")
-                if len(parts) >= 3:
-                    return f"/health/{{{parts[2]}_type}}"
-                return "/health/{check_type}"
+                return self._extract_health_route_pattern(path)
 
-            # Return path as-is for other endpoints (metrics, docs, etc.)
-            return path
+            # Handle docs endpoints
+            if (
+                path.startswith("/docs")
+                or path.startswith("/redoc")
+                or path.startswith("/openapi.json")
+            ):
+                return path
+
+            # Handle metrics endpoint
+            if path == "/metrics":
+                return "/metrics"
+
+            # Handle root endpoint
+            if path == "/":
+                return "/"
+
+            # Fallback for unmatched routes - sanitize but preserve structure
+            return self._sanitize_unmatched_route(path)
 
         except Exception as e:
             logger.error(
@@ -281,20 +297,255 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
                 exc_info=True,
             )
             # Return sanitized path as fallback
-            return request.url.path
+            return self._sanitize_path(request.url.path)
+
+    def _sanitize_path(self, path: str) -> str:
+        """
+        Sanitize sensitive data from paths.
+
+        Args:
+            path: Original path string
+
+        Returns:
+            Sanitized path string
+        """
+        try:
+            # Remove query parameters and fragments
+            if '?' in path:
+                path = path.split('?')[0]
+            if '#' in path:
+                path = path.split('#')[0]
+
+            # Remove trailing slash for consistency
+            path = path.rstrip('/')
+
+            # Handle empty path after sanitization
+            if not path:
+                return "/"
+
+            return path
+        except Exception as e:
+            logger.error(
+                "Failed to sanitize path", error=str(e), path=path, exc_info=True
+            )
+            return "/"
+
+    def _extract_models_route_pattern(self, path: str) -> str:
+        """Extract route pattern for /api/v1/models endpoints."""
+        if path == "/api/v1/models":
+            return "/api/v1/models"
+
+        # This shouldn't happen based on current routes, but handle gracefully
+        parts = path.split("/")
+        if len(parts) > 4:
+            # Unexpected sub-path under models
+            return "/api/v1/models/{unknown}"
+
+        return "/api/v1/models"
+
+    def _extract_model_route_pattern(self, path: str) -> str:
+        """Extract route pattern for /api/v1/model endpoints (singular)."""
+        parts = path.split("/")
+
+        if len(parts) < 5:
+            # /api/v1/model (shouldn't exist but handle gracefully)
+            return "/api/v1/model"
+
+        # /api/v1/model/{model_id}
+        if len(parts) == 5:
+            return "/api/v1/model/{model_id}"
+
+        # /api/v1/model/{model_id}/position
+        if len(parts) == 6 and parts[5] == "position":
+            return "/api/v1/model/{model_id}/position"
+
+        # /api/v1/model/{model_id}/portfolio
+        if len(parts) == 6 and parts[5] == "portfolio":
+            return "/api/v1/model/{model_id}/portfolio"
+
+        # Fallback for unexpected sub-resources
+        if len(parts) > 6:
+            return f"/api/v1/model/{{model_id}}/{'/'.join(parts[5:])}"
+
+        return f"/api/v1/model/{{model_id}}/{parts[5]}"
+
+    def _extract_rebalances_route_pattern(self, path: str) -> str:
+        """Extract route pattern for /api/v1/rebalances endpoints (plural)."""
+        parts = path.split("/")
+
+        if len(parts) == 4:  # /api/v1/rebalances
+            return "/api/v1/rebalances"
+
+        # /api/v1/rebalances/portfolios (POST endpoint)
+        if len(parts) == 5 and parts[4] == "portfolios":
+            return "/api/v1/rebalances/portfolios"
+
+        # Fallback for other rebalances sub-paths
+        return f"/api/v1/rebalances/{'/'.join(parts[4:])}"
+
+    def _extract_portfolio_route_pattern(self, path: str) -> str:
+        """Extract route pattern for /api/v1/portfolio endpoints."""
+        parts = path.split("/")
+
+        if len(parts) < 5:
+            return "/api/v1/portfolio"
+
+        # /api/v1/portfolio/{portfolio_id}/rebalance
+        if len(parts) == 6 and parts[5] == "rebalance":
+            return "/api/v1/portfolio/{portfolio_id}/rebalance"
+
+        # /api/v1/portfolio/{portfolio_id}
+        if len(parts) == 5:
+            return "/api/v1/portfolio/{portfolio_id}"
+
+        # Fallback for other portfolio sub-paths
+        return f"/api/v1/portfolio/{{portfolio_id}}/{'/'.join(parts[5:])}"
+
+    def _extract_rebalance_route_pattern(self, path: str) -> str:
+        """Extract route pattern for /api/v1/rebalance endpoints (singular)."""
+        parts = path.split("/")
+
+        if len(parts) == 4:  # /api/v1/rebalance
+            return "/api/v1/rebalance"
+
+        # /api/v1/rebalance/{rebalance_id}
+        if len(parts) == 5:
+            return "/api/v1/rebalance/{rebalance_id}"
+
+        # /api/v1/rebalance/{rebalance_id}/portfolios
+        if len(parts) == 6 and parts[5] == "portfolios":
+            return "/api/v1/rebalance/{rebalance_id}/portfolios"
+
+        # /api/v1/rebalance/{rebalance_id}/portfolio/{portfolio_id}/positions
+        if len(parts) == 8 and parts[5] == "portfolio" and parts[7] == "positions":
+            return "/api/v1/rebalance/{rebalance_id}/portfolio/{portfolio_id}/positions"
+
+        # Fallback for other rebalance sub-paths
+        return f"/api/v1/rebalance/{'/'.join(parts[4:])}"
+
+    def _extract_health_route_pattern(self, path: str) -> str:
+        """Extract route pattern for /health endpoints."""
+        parts = path.split("/")
+
+        if len(parts) == 2:  # /health
+            return "/health"
+
+        # /health/{check_type} (e.g., /health/live, /health/ready)
+        if len(parts) == 3:
+            return "/health/{check_type}"
+
+        # Fallback for deeper health paths
+        return f"/health/{'/'.join(parts[2:])}"
+
+    def _sanitize_unmatched_route(self, path: str) -> str:
+        """
+        Sanitize unmatched routes to prevent high cardinality while preserving structure.
+
+        Args:
+            path: The unmatched path
+
+        Returns:
+            Sanitized route pattern
+        """
+        try:
+            parts = path.split("/")
+            sanitized_parts = []
+
+            for i, part in enumerate(parts):
+                if not part:  # Empty part (leading slash)
+                    sanitized_parts.append(part)
+                    continue
+
+                # Check if part looks like an ID (24 char hex, UUID, or numeric)
+                if self._looks_like_id(part):
+                    sanitized_parts.append("{id}")
+                else:
+                    # Keep the original part but limit length to prevent abuse
+                    sanitized_part = part[:50] if len(part) > 50 else part
+                    sanitized_parts.append(sanitized_part)
+
+            result = "/".join(sanitized_parts)
+
+            # Ensure we don't create overly long patterns
+            if len(result) > 200:
+                return "/unknown"
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed to sanitize unmatched route",
+                error=str(e),
+                path=path,
+                exc_info=True,
+            )
+            return "/unknown"
+
+    def _looks_like_id(self, part: str) -> bool:
+        """
+        Check if a path part looks like an ID that should be parameterized.
+
+        Args:
+            part: Path part to check
+
+        Returns:
+            True if the part looks like an ID
+        """
+        try:
+            # MongoDB ObjectId (24 character hex)
+            if len(part) == 24 and all(c in '0123456789abcdefABCDEF' for c in part):
+                return True
+
+            # UUID format (with or without hyphens)
+            if len(part) == 36 and part.count('-') == 4:
+                return True
+            if len(part) == 32 and all(c in '0123456789abcdefABCDEF' for c in part):
+                return True
+
+            # Numeric ID (including shorter ones like "123")
+            if part.isdigit() and len(part) >= 1:
+                return True
+
+            # Alphanumeric ID that looks like an identifier
+            if len(part) > 8 and part.replace('-', '').replace('_', '').isalnum():
+                return True
+
+            return False
+
+        except Exception:
+            return False
 
     def _format_status_code(self, status_code: int) -> str:
         """
         Format HTTP status code as string for consistent labeling.
 
+        Converts numeric HTTP status codes to strings as required by the metrics specification.
+
         Args:
             status_code: Numeric HTTP status code
 
         Returns:
-            Status code as string
+            Status code as string (e.g., "200", "404", "500")
         """
         try:
+            # Ensure we have a valid status code
+            if not isinstance(status_code, int):
+                logger.warning(
+                    "Invalid status code type",
+                    status_code=status_code,
+                    status_code_type=type(status_code).__name__,
+                )
+                return "unknown"
+
+            # Validate status code range (100-599 are valid HTTP status codes)
+            if status_code < 100 or status_code > 599:
+                logger.warning(
+                    "Status code out of valid range", status_code=status_code
+                )
+                return "unknown"
+
             return str(status_code)
+
         except Exception as e:
             logger.error(
                 "Failed to format status code",
@@ -308,14 +559,49 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         """
         Get uppercase HTTP method name for consistent labeling.
 
+        Converts HTTP method to uppercase as required by the metrics specification.
+
         Args:
             method: HTTP method string
 
         Returns:
-            Uppercase HTTP method string
+            Uppercase HTTP method string (e.g., "GET", "POST", "PUT", "DELETE")
         """
         try:
-            return method.upper()
+            # Ensure we have a valid method string
+            if not isinstance(method, str):
+                logger.warning(
+                    "Invalid method type",
+                    method=method,
+                    method_type=type(method).__name__,
+                )
+                return "UNKNOWN"
+
+            # Strip whitespace and convert to uppercase
+            method_upper = method.strip().upper()
+
+            # Validate that it's a known HTTP method
+            valid_methods = {
+                "GET",
+                "POST",
+                "PUT",
+                "DELETE",
+                "PATCH",
+                "HEAD",
+                "OPTIONS",
+                "TRACE",
+                "CONNECT",
+            }
+
+            if method_upper not in valid_methods:
+                logger.warning(
+                    "Unknown HTTP method", method=method, method_upper=method_upper
+                )
+                # Still return the uppercase version for consistency
+                return method_upper if method_upper else "UNKNOWN"
+
+            return method_upper
+
         except Exception as e:
             logger.error(
                 "Failed to format method label",
