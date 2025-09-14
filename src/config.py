@@ -179,6 +179,19 @@ class Settings(BaseSettings):
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
     metrics_port: int = Field(default=9090, description="Metrics endpoint port")
 
+    # OpenTelemetry Configuration
+    otel_collector_grpc_endpoint: str = Field(
+        default="otel-collector-collector.monitoring.svc.cluster.local:4317",
+        description="OpenTelemetry Collector gRPC endpoint",
+    )
+    otel_collector_http_endpoint: str = Field(
+        default="http://otel-collector-collector.monitoring.svc.cluster.local:4318",
+        description="OpenTelemetry Collector HTTP endpoint base URL",
+    )
+    otel_insecure: bool = Field(
+        default=True, description="Use insecure connection for OpenTelemetry gRPC"
+    )
+
     def configure_logging(self) -> None:
         """
         Configure logging based on the log level setting.

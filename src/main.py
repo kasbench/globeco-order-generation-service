@@ -64,21 +64,24 @@ resource = Resource.create(
     }
 )
 
+# Get settings for OpenTelemetry configuration
+settings = get_settings()
+
 # Tracing setup (gRPC and HTTP exporters)
 trace.set_tracer_provider(TracerProvider(resource=resource))
 tracer_provider = trace.get_tracer_provider()
 tracer_provider.add_span_processor(
     BatchSpanProcessor(
         OTLPSpanExporterGRPC(
-            endpoint="otel-collector-collector.monitoring.svc.cluster.local:4317",
-            insecure=True,
+            endpoint=settings.otel_collector_grpc_endpoint,
+            insecure=settings.otel_insecure,
         )
     )
 )
 tracer_provider.add_span_processor(
     BatchSpanProcessor(
         OTLPSpanExporterHTTP(
-            endpoint="http://otel-collector-collector.monitoring.svc.cluster.local:4318/v1/traces"
+            endpoint=f"{settings.otel_collector_http_endpoint}/v1/traces"
         )
     )
 )
@@ -91,13 +94,13 @@ meter_provider = MeterProvider(
     metric_readers=[
         PeriodicExportingMetricReader(
             OTLPMetricExporterGRPC(
-                endpoint="otel-collector-collector.monitoring.svc.cluster.local:4317",
-                insecure=True,
+                endpoint=settings.otel_collector_grpc_endpoint,
+                insecure=settings.otel_insecure,
             )
         ),
         PeriodicExportingMetricReader(
             OTLPMetricExporterHTTP(
-                endpoint="http://otel-collector-collector.monitoring.svc.cluster.local:4318/v1/metrics"
+                endpoint=f"{settings.otel_collector_http_endpoint}/v1/metrics"
             )
         ),
     ],
@@ -107,7 +110,6 @@ set_meter_provider(meter_provider)
 # --- End OpenTelemetry Instrumentation ---
 
 # Configure structured logging early with settings
-settings = get_settings()
 configure_structured_logging(settings.log_level)
 logger = get_logger(__name__)
 

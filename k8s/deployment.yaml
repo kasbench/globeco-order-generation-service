@@ -32,6 +32,49 @@ spec:
               value: "false"
             - name: LOG_LEVEL
               value: "DEBUG"
+            # OpenTelemetry Configuration using node-local collector
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_COLLECTOR_GRPC_ENDPOINT
+              value: "$(NODE_IP):4317"
+            - name: OTEL_COLLECTOR_HTTP_ENDPOINT
+              value: "http://$(NODE_IP):4318"
+            - name: OTEL_INSECURE
+              value: "true"
+            # Inject the node and pod metadata from the Downward API
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+
+            # Define standard service identity attributes
+            - name: OTEL_SERVICE_NAME
+              value: "globeco-order-generation-service"
+            - name: OTEL_SERVICE_NAMESPACE
+              value: "globeco"
+
+            # Inject Kubernetes metadata as resource attributes for k8sattributes processor
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: >-
+                k8s.pod.ip=$(MY_POD_IP),
+                k8s.pod.name=$(MY_POD_NAME),
+                k8s.node.name=$(MY_NODE_NAME),
+                k8s.namespace.name=$(MY_NAMESPACE)
           resources:
             requests:
               cpu: "100m"
