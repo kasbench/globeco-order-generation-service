@@ -48,7 +48,7 @@ class MongoModelRepository(ModelRepository):
             # Save to database
             saved_document = await document.create()
 
-            logger.info(
+            logger.debug(
                 f"Created investment model '{model.name}' with ID {saved_document.id}"
             )
 
@@ -162,7 +162,7 @@ class MongoModelRepository(ModelRepository):
             # Save changes
             await current_doc.save()
 
-            logger.info(
+            logger.debug(
                 f"Updated investment model '{model.name}' to version {current_doc.version}"
             )
 
@@ -205,7 +205,7 @@ class MongoModelRepository(ModelRepository):
 
             await document.delete()
 
-            logger.info(f"Deleted investment model with ID {model_id}")
+            logger.debug(f"Deleted investment model with ID {model_id}")
             return True
 
         except (ValueError, TypeError) as e:

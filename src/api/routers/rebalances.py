@@ -68,7 +68,7 @@ async def get_rebalances(
         HTTPException: If retrieval fails or parameters are invalid
     """
     try:
-        logger.info(f"Retrieving rebalances with offset={offset}, limit={limit}")
+        logger.debug(f"Retrieving rebalances with offset={offset}, limit={limit}")
 
         # Get rebalances with pagination
         rebalances = await repository.list_with_pagination(offset=offset, limit=limit)
@@ -79,7 +79,7 @@ async def get_rebalances(
             dto = RebalanceMapper.from_rebalance_entity(rebalance)
             result.append(dto)
 
-        logger.info(f"Retrieved {len(result)} rebalances")
+        logger.debug(f"Retrieved {len(result)} rebalances")
         return result
 
     except ValueError as e:
@@ -115,7 +115,7 @@ async def get_rebalance_by_id(
         HTTPException: If rebalance not found or retrieval fails
     """
     try:
-        logger.info(f"Retrieving rebalance {rebalance_id}")
+        logger.debug(f"Retrieving rebalance {rebalance_id}")
 
         # Validate ObjectId format
         logger.debug(f"API: Validating ObjectId format for rebalance_id={rebalance_id}")
@@ -143,7 +143,7 @@ async def get_rebalance_by_id(
         # Convert to DTO using mapper
         dto = RebalanceMapper.from_rebalance_entity(rebalance)
 
-        logger.info(f"Retrieved rebalance {rebalance_id}")
+        logger.debug(f"Retrieved rebalance {rebalance_id}")
         return dto
 
     except HTTPException:
@@ -181,7 +181,7 @@ async def get_portfolios_by_rebalance_id(
         HTTPException: If rebalance not found, invalid ID format, or retrieval fails
     """
     try:
-        logger.info(f"Retrieving portfolios for rebalance {rebalance_id}")
+        logger.debug(f"Retrieving portfolios for rebalance {rebalance_id}")
 
         # Validate ObjectId format
         logger.debug(f"API: Validating ObjectId format for rebalance_id={rebalance_id}")
@@ -216,7 +216,7 @@ async def get_portfolios_by_rebalance_id(
                 detail=error_response.model_dump(),
             )
 
-        logger.info(
+        logger.debug(
             f"Retrieved {len(portfolios)} portfolios for rebalance {rebalance_id}"
         )
         return portfolios
@@ -278,7 +278,7 @@ async def get_portfolio_positions(
         HTTPException: If rebalance or portfolio not found, invalid ID format, or retrieval fails
     """
     try:
-        logger.info(
+        logger.debug(
             f"Retrieving positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
         )
 
@@ -328,7 +328,7 @@ async def get_portfolio_positions(
                 detail=error_response.model_dump(),
             )
 
-        logger.info(
+        logger.debug(
             f"Retrieved {len(positions)} positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
         )
         return positions
@@ -404,7 +404,7 @@ async def get_rebalances_by_portfolios(
         HTTPException: If retrieval fails or parameters are invalid
     """
     try:
-        logger.info(
+        logger.debug(
             f"Retrieving rebalances for {len(request.portfolios)} portfolios with offset={offset}, limit={limit}"
         )
 
@@ -419,7 +419,7 @@ async def get_rebalances_by_portfolios(
             dto = RebalanceMapper.from_rebalance_entity(rebalance)
             result.append(dto)
 
-        logger.info(f"Retrieved {len(result)} rebalances for portfolios")
+        logger.debug(f"Retrieved {len(result)} rebalances for portfolios")
         return result
 
     except ValueError as e:
@@ -475,7 +475,7 @@ async def delete_rebalance(
                 detail=f"Rebalance {rebalance_id} not found",
             )
 
-        logger.info(f"Deleted rebalance {rebalance_id}")
+        logger.debug(f"Deleted rebalance {rebalance_id}")
         return {"message": f"Rebalance {rebalance_id} deleted successfully"}
 
     except HTTPException:

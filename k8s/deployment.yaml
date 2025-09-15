@@ -31,7 +31,7 @@ spec:
             - name: OTEL_METRICS_LOGGING_ENABLED
               value: "false"
             - name: LOG_LEVEL
-              value: "DEBUG"
+              value: "INFO"
             # OpenTelemetry Configuration using node-local collector
             - name: NODE_IP
               valueFrom:

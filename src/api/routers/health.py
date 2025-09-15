@@ -474,7 +474,7 @@ async def health_check_endpoint(
     Returns:
         Detailed health status
     """
-    logger.info(
+    logger.debug(
         "Health check requested",
         include_external=include_external,
         include_optimization=include_optimization,

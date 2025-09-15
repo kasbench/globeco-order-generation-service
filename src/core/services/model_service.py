@@ -64,7 +64,7 @@ class ModelService:
             ServiceException: If retrieval fails
         """
         try:
-            logger.info("Retrieving all investment models")
+            logger.debug("Retrieving all investment models")
             models = await self._model_repository.list_all()
             return [self._model_mapper.to_dto(model) for model in models]
         except Exception as e:
@@ -94,7 +94,7 @@ class ModelService:
             ServiceException: If retrieval fails
         """
         try:
-            logger.info(
+            logger.debug(
                 "Retrieving models with pagination",
                 offset=offset,
                 limit=limit,
@@ -125,7 +125,7 @@ class ModelService:
         Raises:
             NotFoundError: If model doesn't exist
         """
-        logger.info("Retrieving model by ID", model_id=model_id)
+        logger.debug("Retrieving model by ID", model_id=model_id)
 
         try:
             model = await self._model_repository.get_by_id(model_id)
@@ -137,7 +137,7 @@ class ModelService:
                     entity_id=model_id,
                 )
 
-            logger.info(
+            logger.debug(
                 "Model retrieved successfully", model_id=model_id, name=model.name
             )
             return self._model_mapper.to_dto(model)
@@ -160,7 +160,7 @@ class ModelService:
         Raises:
             ValidationError: If model data is invalid
         """
-        logger.info("Creating new model", name=create_dto.name)
+        logger.debug("Creating new model", name=create_dto.name)
 
         try:
             # Convert DTO to domain entity
@@ -172,7 +172,7 @@ class ModelService:
             # Persist model
             created_model = await self._model_repository.create(model)
 
-            logger.info(
+            logger.debug(
                 "Model created successfully",
                 model_id=str(created_model.model_id),
                 name=created_model.name,
@@ -202,7 +202,7 @@ class ModelService:
             OptimisticLockingError: If version conflict occurs
             ValidationError: If updated data is invalid
         """
-        logger.info("Updating model", model_id=model_id, name=update_dto.name)
+        logger.debug("Updating model", model_id=model_id, name=update_dto.name)
 
         try:
             # Check if model exists
@@ -236,7 +236,7 @@ class ModelService:
             # Persist updated model
             saved_model = await self._model_repository.update(updated_model)
 
-            logger.info(
+            logger.debug(
                 "Model updated successfully",
                 model_id=model_id,
                 name=saved_model.name,
@@ -267,7 +267,7 @@ class ModelService:
             NotFoundError: If model doesn't exist
             ValidationError: If position data is invalid
         """
-        logger.info(
+        logger.debug(
             "Adding position to model",
             model_id=model_id,
             security_id=position_dto.security_id,
@@ -298,7 +298,7 @@ class ModelService:
             # Persist updated model
             updated_model = await self._model_repository.update(model)
 
-            logger.info(
+            logger.debug(
                 "Position added successfully",
                 model_id=model_id,
                 security_id=position_dto.security_id,
@@ -333,7 +333,7 @@ class ModelService:
             NotFoundError: If model doesn't exist
             ValidationError: If position data is invalid
         """
-        logger.info(
+        logger.debug(
             "Updating position in model",
             model_id=model_id,
             security_id=position_dto.security_id,
@@ -362,7 +362,7 @@ class ModelService:
             # Persist updated model
             updated_model = await self._model_repository.update(model)
 
-            logger.info(
+            logger.debug(
                 "Position updated successfully",
                 model_id=model_id,
                 security_id=position_dto.security_id,
@@ -397,7 +397,7 @@ class ModelService:
             NotFoundError: If model doesn't exist
             ValidationError: If removal would violate business rules
         """
-        logger.info(
+        logger.debug(
             "Removing position from model",
             model_id=model_id,
             security_id=position_dto.security_id,
@@ -425,7 +425,7 @@ class ModelService:
             # Persist updated model
             updated_model = await self._model_repository.update(model)
 
-            logger.info(
+            logger.debug(
                 "Position removed successfully",
                 model_id=model_id,
                 security_id=position_dto.security_id,
@@ -460,7 +460,7 @@ class ModelService:
             NotFoundError: If model doesn't exist
             ValidationError: If portfolio data is invalid
         """
-        logger.info(
+        logger.debug(
             "Adding portfolios to model",
             model_id=model_id,
             portfolio_count=len(portfolio_dto.portfolios),
@@ -489,7 +489,7 @@ class ModelService:
             # Persist updated model
             updated_model = await self._model_repository.update(model)
 
-            logger.info(
+            logger.debug(
                 "Portfolios added successfully",
                 model_id=model_id,
                 portfolio_count=len(portfolio_dto.portfolios),
@@ -519,7 +519,7 @@ class ModelService:
             NotFoundError: If model doesn't exist
             ValidationError: If removal would violate business rules
         """
-        logger.info(
+        logger.debug(
             "Removing portfolios from model",
             model_id=model_id,
             portfolio_count=len(portfolio_dto.portfolios),
@@ -548,7 +548,7 @@ class ModelService:
             # Persist updated model
             updated_model = await self._model_repository.update(model)
 
-            logger.info(
+            logger.debug(
                 "Portfolios removed successfully",
                 model_id=model_id,
                 portfolio_count=len(portfolio_dto.portfolios),
@@ -577,7 +577,7 @@ class ModelService:
             OptimisticLockingError: If version conflict occurs
             BusinessRuleViolationError: If deletion would violate business rules
         """
-        logger.info("Deleting model", model_id=model_id, version=version)
+        logger.debug("Deleting model", model_id=model_id, version=version)
 
         try:
             # Get existing model to check version
@@ -617,7 +617,7 @@ class ModelService:
             deleted = await self._model_repository.delete(model_id)
 
             if deleted:
-                logger.info("Model deleted successfully", model_id=model_id)
+                logger.debug("Model deleted successfully", model_id=model_id)
             else:
                 logger.warning("Model deletion failed", model_id=model_id)
 

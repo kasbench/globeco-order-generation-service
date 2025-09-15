@@ -111,10 +111,10 @@ class PortfolioAccountingClient(ExternalServiceClientProtocol):
 
             # Handle empty response (no balance record)
             if response is None:
-                logger.info(f"No balance record found for portfolio {portfolio_id}")
+                logger.debug(f"No balance record found for portfolio {portfolio_id}")
                 return None
 
-            logger.info(
+            logger.debug(
                 f"Retrieved portfolio summary for {portfolio_id}: "
                 f"{response.get('securityCount', 0)} securities, "
                 f"cash balance: {response.get('cashBalance', '0')}"
@@ -263,7 +263,7 @@ class PortfolioAccountingClient(ExternalServiceClientProtocol):
             ExternalServiceError: If portfolio not found, missing data, or service error
         """
         try:
-            logger.info(f"Calculating market value for portfolio {portfolio_id}")
+            logger.debug(f"Calculating market value for portfolio {portfolio_id}")
             start_time = logger._get_time() if hasattr(logger, '_get_time') else None
 
             # Get portfolio summary
@@ -271,7 +271,7 @@ class PortfolioAccountingClient(ExternalServiceClientProtocol):
 
             # Handle empty portfolio (no balance record)
             if not summary:
-                logger.info(
+                logger.debug(
                     f"No balance record for portfolio {portfolio_id}, returning zero"
                 )
                 return Decimal("0.000")
@@ -347,13 +347,13 @@ class PortfolioAccountingClient(ExternalServiceClientProtocol):
 
             if start_time:
                 elapsed = logger._get_time() - start_time
-                logger.info(
+                logger.debug(
                     f"Portfolio {portfolio_id} market value calculation completed: "
                     f"{rounded_value} (cash: {cash_balance}, securities: {securities_value}) "
                     f"in {elapsed:.2f}s"
                 )
             else:
-                logger.info(
+                logger.debug(
                     f"Portfolio {portfolio_id} market value: {rounded_value} "
                     f"(cash: {cash_balance}, securities: {securities_value})"
                 )

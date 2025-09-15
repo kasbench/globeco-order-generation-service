@@ -77,7 +77,7 @@ class PortfolioClient(ExternalServiceClientProtocol):
                 "GET", f"/api/v1/portfolio/{portfolio_id}"
             )
 
-            logger.info(
+            logger.debug(
                 f"Retrieved portfolio metadata for {portfolio_id}: {response.get('name', 'Unknown')}"
             )
             return response
@@ -122,7 +122,7 @@ class PortfolioClient(ExternalServiceClientProtocol):
             invalid_count = len(response.get("invalid", []))
             inactive_count = len(response.get("inactive", []))
 
-            logger.info(
+            logger.debug(
                 f"Portfolio validation completed: {valid_count} valid, "
                 f"{invalid_count} invalid, {inactive_count} inactive"
             )
@@ -211,7 +211,7 @@ class PortfolioClient(ExternalServiceClientProtocol):
             )
 
             portfolios = response.get("portfolios", [])
-            logger.info(
+            logger.debug(
                 f"Retrieved {len(portfolios)} portfolios of type {portfolio_type}"
             )
 

@@ -92,7 +92,7 @@ class RebalanceService:
             OptimizationError: If optimization fails
             ExternalServiceError: If external services are unavailable
         """
-        logger.info("Starting portfolio rebalancing", portfolio_id=portfolio_id)
+        logger.debug("Starting portfolio rebalancing", portfolio_id=portfolio_id)
 
         try:
             # Get portfolio's associated model
@@ -157,7 +157,7 @@ class RebalanceService:
                 drifts=drifts,
             )
 
-            logger.info(
+            logger.debug(
                 "Portfolio rebalancing completed",
                 portfolio_id=portfolio_id,
                 rebalance_id=str(rebalance_record.rebalance_id),
@@ -194,7 +194,7 @@ class RebalanceService:
             OptimizationError: If optimization fails for any portfolio
             ExternalServiceError: If external services are unavailable
         """
-        logger.info("Starting model portfolio rebalancing", model_id=model_id)
+        logger.debug("Starting model portfolio rebalancing", model_id=model_id)
 
         try:
             # Get investment model
@@ -204,11 +204,11 @@ class RebalanceService:
                 raise ModelNotFoundError(f"Model {model_id} not found")
 
             if not model.portfolios:
-                logger.info("No portfolios associated with model", model_id=model_id)
+                logger.debug("No portfolios associated with model", model_id=model_id)
                 return []
 
             # Rebalance portfolios in parallel and collect data for persistence
-            logger.info(
+            logger.debug(
                 "Rebalancing portfolios in parallel",
                 model_id=model_id,
                 portfolio_count=len(model.portfolios),
@@ -284,7 +284,7 @@ class RebalanceService:
                 drifts=all_drifts,
             )
 
-            logger.info(
+            logger.debug(
                 "Model portfolio rebalancing completed",
                 model_id=model_id,
                 rebalance_id=str(rebalance_record.rebalance_id),
@@ -442,7 +442,7 @@ class RebalanceService:
         # Total market value = securities + cash
         total_market_value = securities_value + cash_balance
 
-        logger.info(
+        logger.debug(
             "Market value calculation complete",
             portfolio_id=portfolio_id,
             securities_value=float(securities_value),
@@ -586,7 +586,7 @@ class RebalanceService:
 
         Returns both the DTO and the raw data needed for persistence.
         """
-        logger.info(
+        logger.debug(
             "Starting internal portfolio rebalancing", portfolio_id=portfolio_id
         )
 
@@ -645,7 +645,7 @@ class RebalanceService:
             'drifts': drifts,
         }
 
-        logger.info(
+        logger.debug(
             "Internal portfolio rebalancing completed",
             portfolio_id=portfolio_id,
             transaction_count=len(transactions),
@@ -658,7 +658,7 @@ class RebalanceService:
         self, model, portfolio_ids: List[str], portfolio_data: Dict
     ) -> Rebalance:
         """Create and persist a rebalance record."""
-        logger.info(
+        logger.debug(
             "Creating rebalance record",
             model_id=str(model.model_id),
             portfolio_count=len(portfolio_ids),
@@ -798,7 +798,7 @@ class RebalanceService:
         # Persist to database
         saved_rebalance = await self._rebalance_repository.create(rebalance)
 
-        logger.info(
+        logger.debug(
             "Rebalance record created", rebalance_id=str(saved_rebalance.rebalance_id)
         )
         return saved_rebalance

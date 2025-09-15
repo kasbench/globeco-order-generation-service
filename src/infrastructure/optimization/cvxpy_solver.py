@@ -107,7 +107,7 @@ class CVXPYOptimizationEngine(OptimizationEngine):
                     f"No suitable solvers available. Install cvxpy with additional solvers."
                 )
 
-        logger.info(
+        logger.debug(
             f"CVXPY optimization engine initialized with solver: {self.default_solver}"
         )
 
@@ -154,7 +154,7 @@ class CVXPYOptimizationEngine(OptimizationEngine):
             result = await self._solve_optimization(problem_data, timeout)
 
             solve_time = time.time() - start_time
-            logger.info(
+            logger.debug(
                 f"Portfolio optimization completed in {solve_time:.3f}s, "
                 f"status: {result.solver_status}, feasible: {result.is_feasible}"
             )

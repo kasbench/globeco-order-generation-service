@@ -206,7 +206,7 @@ class MongoRebalanceRepository(RebalanceRepository):
             # Save to database
             saved_document = await document.create()
 
-            logger.info(
+            logger.debug(
                 f"Created rebalance for model '{rebalance.model_name}' with ID {saved_document.id}"
             )
 
@@ -275,7 +275,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                 try:
                     document = await RebalanceDocument.get(object_id)
                     if document is None:
-                        logger.info(
+                        logger.debug(
                             f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
                         )
                         return None
@@ -285,7 +285,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                         f"Repository.get_by_id(): Converting Beanie document to dict..."
                     )
                     raw_document = document.model_dump()
-                    logger.info(
+                    logger.debug(
                         f"Repository.get_by_id(): Successfully retrieved rebalance {rebalance_id} using Beanie fallback method"
                     )
                 except Exception as fallback_error:
@@ -305,7 +305,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                     ) from fallback_error
 
             if raw_document is None:
-                logger.info(
+                logger.debug(
                     f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
                 )
                 return None
@@ -518,7 +518,7 @@ class MongoRebalanceRepository(RebalanceRepository):
             # Delete the document
             await document.delete()
 
-            logger.info(f"Deleted rebalance {rebalance_id} with version {version}")
+            logger.debug(f"Deleted rebalance {rebalance_id} with version {version}")
             return True
 
         except ConcurrencyError:
@@ -812,7 +812,7 @@ class MongoRebalanceRepository(RebalanceRepository):
             RepositoryError: If retrieval fails
         """
         try:
-            logger.info(f"Retrieving portfolios for rebalance {rebalance_id}")
+            logger.debug(f"Retrieving portfolios for rebalance {rebalance_id}")
 
             # Validate ObjectId format
             if not ObjectId.is_valid(rebalance_id):
@@ -884,7 +884,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                 )
                 portfolio_dtos.append(portfolio_dto)
 
-            logger.info(
+            logger.debug(
                 f"Retrieved {len(portfolio_dtos)} portfolios for rebalance {rebalance_id}"
             )
             return portfolio_dtos
@@ -919,7 +919,7 @@ class MongoRebalanceRepository(RebalanceRepository):
             RepositoryError: If retrieval fails
         """
         try:
-            logger.info(
+            logger.debug(
                 f"Retrieving positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
             )
 
@@ -954,7 +954,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                     break
 
             if target_portfolio is None:
-                logger.info(
+                logger.debug(
                     f"Portfolio {portfolio_id} not found in rebalance {rebalance_id}"
                 )
                 # Return a special indicator that portfolio was not found
@@ -1002,7 +1002,7 @@ class MongoRebalanceRepository(RebalanceRepository):
                 )
                 position_dtos.append(position_dto)
 
-            logger.info(
+            logger.debug(
                 f"Retrieved {len(position_dtos)} positions for portfolio {portfolio_id} in rebalance {rebalance_id}"
             )
             return position_dtos

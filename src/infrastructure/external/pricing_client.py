@@ -131,7 +131,7 @@ class PricingServiceClient(ExternalServiceClientProtocol):
                     )
                     # Continue with other securities instead of failing the whole batch
 
-            logger.info(
+            logger.debug(
                 f"Successfully retrieved prices for {len(prices)} out of {len(security_ids)} securities"
             )
             return prices

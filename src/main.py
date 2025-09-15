@@ -178,7 +178,7 @@ async def correlation_middleware(request: Request, call_next):
     set_correlation_id(correlation_id)
 
     # Log request
-    logger.info(
+    logger.debug(
         "Request received",
         method=request.method,
         url=str(request.url),
@@ -192,7 +192,7 @@ async def correlation_middleware(request: Request, call_next):
     response.headers["X-Correlation-ID"] = correlation_id
 
     # Log response
-    logger.info(
+    logger.debug(
         "Request completed",
         method=request.method,
         url=str(request.url),

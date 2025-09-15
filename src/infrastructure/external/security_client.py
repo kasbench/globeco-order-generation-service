@@ -99,7 +99,7 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
                 response = await self._base_client._make_request(
                     "GET", f"/api/v1/security/{security_id}"
                 )
-                logger.info(
+                logger.debug(
                     f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
                 )
                 await self._redis.set(
@@ -145,7 +145,7 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             invalid_count = len(response.get("invalid", []))
             inactive_count = len(response.get("inactive", []))
 
-            logger.info(
+            logger.debug(
                 f"Security validation completed: {valid_count} valid, "
                 f"{invalid_count} invalid, {inactive_count} inactive"
             )
@@ -233,7 +233,7 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             )
 
             securities = response.get("securities", [])
-            logger.info(
+            logger.debug(
                 f"Retrieved {len(securities)} securities of type {security_type}"
             )
 
@@ -268,7 +268,7 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             )
 
             securities = response.get("securities", [])
-            logger.info(f"Retrieved {len(securities)} securities in sector {sector}")
+            logger.debug(f"Retrieved {len(securities)} securities in sector {sector}")
 
             return securities
 
@@ -302,7 +302,7 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             )
 
             securities = response.get("securities", [])
-            logger.info(f"Found {len(securities)} securities for query '{query}'")
+            logger.debug(f"Found {len(securities)} securities for query '{query}'")
 
             return securities
 
