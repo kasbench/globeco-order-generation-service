@@ -2,7 +2,7 @@
 set -e
 
 # Convert LOG_LEVEL to lowercase for uvicorn
-UVICORN_LOG_LEVEL=$(echo "${LOG_LEVEL:-INFO}" | tr '[:upper:]' '[:lower:]')
+UVICORN_LOG_LEVEL=$(echo "${UVICORN_LOG_LEVEL:-WARNING}" | tr '[:upper:]' '[:lower:]')
 
 # Start uvicorn directly (single process for consistent metrics)
 exec /app/.venv/bin/uvicorn src.main:app \
