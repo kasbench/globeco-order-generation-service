@@ -4,6 +4,10 @@ set -e
 # Convert LOG_LEVEL to lowercase for uvicorn
 UVICORN_LOG_LEVEL=$(echo "${UVICORN_LOG_LEVEL:-WARNING}" | tr '[:upper:]' '[:lower:]')
 
+echo "Starting GlobeCo Order Generation Service..."
+echo "Port: ${PORT:-8088}"
+echo "Log Level: $UVICORN_LOG_LEVEL"
+
 # Start uvicorn directly (single process for consistent metrics)
 exec /app/.venv/bin/uvicorn src.main:app \
      --host 0.0.0.0 \

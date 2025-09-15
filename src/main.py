@@ -132,9 +132,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Startup logic
     logger.info("Initializing database connections...")
-    from src.infrastructure.database.database import init_database
+    from src.infrastructure.database.database import db_manager, init_database
 
-    await init_database()
+    try:
+        await init_database()
+        logger.info(
+            f"Database initialization completed. Connected: {db_manager.is_connected}"
+        )
+    except Exception as e:
+        logger.error(f"Database initialization failed: {str(e)}")
+        raise
 
     logger.info("Setting up external service clients...")
     # External service clients are managed through dependency injection with @lru_cache()
@@ -142,7 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Circuit breaker patterns and retry logic are handled within each client implementation.
     logger.info("External service clients configured via dependency injection")
 
-    logger.info("Application startup completed")
+    logger.info("Application startup completed successfully")
 
     yield
 

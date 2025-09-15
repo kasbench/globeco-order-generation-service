@@ -28,6 +28,7 @@ class DatabaseManager:
         self.client: Optional[AsyncIOMotorClient] = None
         self.database: Optional[AsyncIOMotorDatabase] = None
         self._is_initialized = False
+        self._initialization_in_progress = False
 
     async def connect(self) -> None:
         """
@@ -36,8 +37,22 @@ class DatabaseManager:
         Raises:
             DatabaseConnectionError: If connection fails
         """
+        # Prevent multiple concurrent initialization attempts
+        if self._initialization_in_progress:
+            logger.info("Database initialization already in progress, waiting...")
+            # Wait for initialization to complete
+            while self._initialization_in_progress and not self._is_initialized:
+                await asyncio.sleep(0.1)
+            return
+
+        if self._is_initialized:
+            logger.debug("Database already initialized")
+            return
+
+        self._initialization_in_progress = True
         try:
             settings = get_settings()
+            logger.info("Starting database initialization...")
 
             # Create MongoDB client
             self.client = AsyncIOMotorClient(
@@ -56,6 +71,7 @@ class DatabaseManager:
             self.database = self.client[settings.database_name]
 
             # Initialize Beanie with document models
+            logger.info("Initializing Beanie ODM...")
             await init_beanie(
                 database=self.database,
                 document_models=[ModelDocument, RebalanceDocument],
@@ -78,6 +94,8 @@ class DatabaseManager:
             error_msg = f"Unexpected database connection error: {str(e)}"
             logger.error(error_msg)
             raise DatabaseConnectionError(error_msg) from e
+        finally:
+            self._initialization_in_progress = False
 
     async def disconnect(self) -> None:
         """Close database connection."""
@@ -86,6 +104,7 @@ class DatabaseManager:
             self.client = None
             self.database = None
             self._is_initialized = False
+            self._initialization_in_progress = False
             logger.info("Disconnected from MongoDB")
 
     async def ping(self) -> bool:
@@ -97,7 +116,19 @@ class DatabaseManager:
         """
         try:
             if not self.client:
+                logger.debug("Database ping failed: No client connection")
                 return False
+
+            # If initialization is in progress, wait a bit and try again
+            if self._initialization_in_progress:
+                logger.debug("Database initialization in progress, waiting...")
+                await asyncio.sleep(0.5)
+                if not self._is_initialized:
+                    logger.debug(
+                        "Database ping failed: Initialization still in progress"
+                    )
+                    return False
+
             await self.client.admin.command('ping')
             return True
         except Exception as e:
@@ -137,6 +168,11 @@ class DatabaseManager:
         """Check if database is connected and initialized."""
         return self._is_initialized and self.client is not None
 
+    @property
+    def is_initializing(self) -> bool:
+        """Check if database initialization is in progress."""
+        return self._initialization_in_progress
+
 
 # Global database manager instance
 db_manager = DatabaseManager()
@@ -170,4 +206,14 @@ async def health_check_database() -> bool:
     Returns:
         bool: True if database is healthy, False otherwise
     """
+    # If initialization is in progress, consider it healthy (starting up)
+    if db_manager.is_initializing:
+        logger.debug("Database health check: initialization in progress")
+        return True
+
+    # If not initialized and not initializing, it's unhealthy
+    if not db_manager.is_connected:
+        logger.debug("Database health check: not connected")
+        return False
+
     return await db_manager.ping()

@@ -36,6 +36,12 @@ class MongoRebalanceRepository(RebalanceRepository):
     def _is_beanie_initialized(self) -> bool:
         """Check if Beanie ODM is properly initialized for RebalanceDocument."""
         try:
+            # Check if database manager is initialized first
+            from src.infrastructure.database.database import db_manager
+
+            if not db_manager.is_connected:
+                return False
+
             # Try to access the motor collection to verify initialization
             collection = RebalanceDocument.get_motor_collection()
             return collection is not None
@@ -261,17 +267,31 @@ class MongoRebalanceRepository(RebalanceRepository):
             logger.debug(
                 f"Repository.get_by_id(): Querying database for raw document..."
             )
+            # Try to use Beanie's get_motor_collection first, with better error handling
+            raw_document = None
+            collection_method_worked = False
+
             try:
                 collection = RebalanceDocument.get_motor_collection()
                 raw_document = await collection.find_one({"_id": object_id})
+                collection_method_worked = True
                 logger.debug(
                     f"Repository.get_by_id(): Raw database query completed successfully, found document: {raw_document is not None}"
                 )
             except (CollectionWasNotInitialized, AttributeError, RuntimeError) as e:
-                logger.warning(
-                    f"Repository.get_by_id(): Beanie ODM not properly initialized, falling back to standard method. Error: {str(e)}"
-                )
-                # Fallback to standard Beanie method if get_motor_collection fails
+                # Check if database is still initializing before logging warning
+                from src.infrastructure.database.database import db_manager
+
+                if db_manager.is_initializing:
+                    logger.debug(
+                        f"Repository.get_by_id(): Beanie ODM still initializing, will try fallback method"
+                    )
+                else:
+                    logger.warning(
+                        f"Repository.get_by_id(): Beanie ODM not properly initialized, falling back to standard method. Error: {str(e)}"
+                    )
+
+                # Try the standard Beanie method as fallback
                 try:
                     document = await RebalanceDocument.get(object_id)
                     if document is None:
@@ -289,20 +309,44 @@ class MongoRebalanceRepository(RebalanceRepository):
                         f"Repository.get_by_id(): Successfully retrieved rebalance {rebalance_id} using Beanie fallback method"
                     )
                 except Exception as fallback_error:
-                    logger.error(
-                        f"Repository.get_by_id(): Both raw and standard Beanie methods failed. Raw error: {str(e)}, Fallback error: {str(fallback_error)}"
+                    # If both methods fail, try one more approach - direct MongoDB access
+                    logger.debug(
+                        f"Repository.get_by_id(): Standard Beanie method also failed, trying direct MongoDB access"
                     )
-                    error_msg = (
-                        f"Database not properly initialized. This may indicate:\n"
-                        f"1. Beanie ODM initialization failed during application startup\n"
-                        f"2. Database connection was lost\n"
-                        f"3. Race condition during application startup\n"
-                        f"Raw method error: {str(e) or 'Unknown error'}\n"
-                        f"Fallback method error: {str(fallback_error) or 'Unknown error'}"
-                    )
-                    raise RepositoryError(
-                        error_msg, operation="get"
-                    ) from fallback_error
+                    try:
+                        from src.infrastructure.database.database import db_manager
+
+                        if db_manager.database:
+                            # Use the correct collection name from the document settings
+                            collection = db_manager.database["rebalances"]
+                            raw_document = await collection.find_one({"_id": object_id})
+                            if raw_document:
+                                logger.debug(
+                                    f"Repository.get_by_id(): Successfully retrieved document using direct MongoDB access"
+                                )
+                            else:
+                                logger.debug(
+                                    f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
+                                )
+                                return None
+                        else:
+                            raise RuntimeError("Database not available")
+                    except Exception as direct_error:
+                        logger.error(
+                            f"Repository.get_by_id(): All methods failed. Raw error: {str(e)}, Fallback error: {str(fallback_error)}, Direct error: {str(direct_error)}"
+                        )
+                        error_msg = (
+                            f"Database not properly initialized. This may indicate:\n"
+                            f"1. Beanie ODM initialization failed during application startup\n"
+                            f"2. Database connection was lost\n"
+                            f"3. Race condition during application startup\n"
+                            f"Raw method error: {str(e) or 'Unknown error'}\n"
+                            f"Fallback method error: {str(fallback_error) or 'Unknown error'}\n"
+                            f"Direct method error: {str(direct_error) or 'Unknown error'}"
+                        )
+                        raise RepositoryError(
+                            error_msg, operation="get"
+                        ) from direct_error
 
             if raw_document is None:
                 logger.debug(

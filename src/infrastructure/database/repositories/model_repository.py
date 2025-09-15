@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from beanie.exceptions import DocumentNotFound
+from beanie.exceptions import CollectionWasNotInitialized, DocumentNotFound
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
@@ -78,21 +78,103 @@ class MongoModelRepository(ModelRepository):
             RepositoryError: If retrieval fails due to invalid ID format
         """
         try:
+            logger.debug(
+                f"ModelRepository.get_by_id(): Starting retrieval for model_id={model_id}"
+            )
+
+            # Validate ObjectId format
+            if not ObjectId.is_valid(model_id):
+                logger.error(
+                    f"ModelRepository.get_by_id(): Invalid ObjectId format: {model_id}"
+                )
+                raise ValueError(f"Invalid ObjectId format: {model_id}")
+
             # Convert string ID to ObjectId
             object_id = ObjectId(model_id)
+            logger.debug(f"ModelRepository.get_by_id(): Created ObjectId: {object_id}")
 
-            # Find document by ID
-            document = await ModelDocument.get(object_id)
+            # Try to find document by ID with fallback handling
+            document = None
+            try:
+                document = await ModelDocument.get(object_id)
+                logger.debug(
+                    f"ModelRepository.get_by_id(): Standard Beanie method succeeded, found document: {document is not None}"
+                )
+            except (CollectionWasNotInitialized, AttributeError, RuntimeError) as e:
+                # Check if database is still initializing before logging warning
+                from src.infrastructure.database.database import db_manager
+
+                if db_manager.is_initializing:
+                    logger.debug(
+                        f"ModelRepository.get_by_id(): Beanie ODM still initializing, trying direct MongoDB access"
+                    )
+                else:
+                    logger.warning(
+                        f"ModelRepository.get_by_id(): Beanie ODM not properly initialized, trying direct MongoDB access. Error: {str(e)}"
+                    )
+
+                # Try direct MongoDB access as fallback
+                try:
+                    from src.infrastructure.database.database import db_manager
+
+                    if db_manager.database:
+                        collection = db_manager.database[
+                            "models"
+                        ]  # Collection name from ModelDocument settings
+                        raw_document = await collection.find_one({"_id": object_id})
+                        if raw_document:
+                            logger.debug(
+                                f"ModelRepository.get_by_id(): Successfully retrieved document using direct MongoDB access"
+                            )
+                            # Convert raw document directly to domain model without creating ModelDocument
+                            logger.debug(
+                                f"ModelRepository.get_by_id(): Converting raw document to domain model..."
+                            )
+                            domain_model = self._convert_raw_to_domain_model(
+                                raw_document
+                            )
+                            logger.debug(
+                                f"ModelRepository.get_by_id(): Successfully converted raw document to domain model"
+                            )
+                            return domain_model
+                        else:
+                            logger.debug(
+                                f"ModelRepository.get_by_id(): No document found for model_id={model_id}"
+                            )
+                            return None
+                    else:
+                        raise RuntimeError("Database not available")
+                except Exception as direct_error:
+                    logger.error(
+                        f"ModelRepository.get_by_id(): Both standard and direct methods failed. Standard error: {str(e)}, Direct error: {str(direct_error)}"
+                    )
+                    error_msg = (
+                        f"Database not properly initialized. This may indicate:\n"
+                        f"1. Beanie ODM initialization failed during application startup\n"
+                        f"2. Database connection was lost\n"
+                        f"3. Race condition during application startup\n"
+                        f"Standard method error: {str(e) or 'Unknown error'}\n"
+                        f"Direct method error: {str(direct_error) or 'Unknown error'}"
+                    )
+                    raise RepositoryError(error_msg, operation="get") from direct_error
 
             if document is None:
+                logger.debug(
+                    f"ModelRepository.get_by_id(): No document found for model_id={model_id}"
+                )
                 return None
 
             # Convert to domain model
-            return document.to_domain_model()
+            logger.debug(f"ModelRepository.get_by_id(): Converting to domain model...")
+            domain_model = document.to_domain_model()
+            logger.debug(
+                f"ModelRepository.get_by_id(): Successfully converted to domain model"
+            )
+            return domain_model
 
         except (ValueError, TypeError) as e:
             error_msg = f"Invalid model ID format: {model_id}"
-            logger.error(error_msg)
+            logger.error(f"{error_msg}. Original error: {str(e)}")
             raise RepositoryError(error_msg, operation="get") from e
         except Exception as e:
             error_msg = f"Failed to retrieve model by ID {model_id}: {str(e)}"
@@ -635,3 +717,25 @@ class MongoModelRepository(ModelRepository):
                 f"Failed to get position count: {e}",
                 operation="get_position_count_for_model",
             )
+
+    def _convert_raw_to_domain_model(self, raw_document: dict) -> InvestmentModel:
+        """Convert raw MongoDB document to domain InvestmentModel without creating ModelDocument."""
+        from src.domain.entities.model import InvestmentModel
+        from src.models.model import PositionEmbedded
+
+        # Convert positions
+        positions = []
+        for pos_data in raw_document.get('positions', []):
+            # Create PositionEmbedded and convert to domain
+            pos_embedded = PositionEmbedded(**pos_data)
+            positions.append(pos_embedded.to_domain_position())
+
+        # Create domain model
+        return InvestmentModel(
+            model_id=raw_document['_id'],
+            name=raw_document['name'],
+            positions=positions,
+            portfolios=raw_document.get('portfolios', []).copy(),
+            last_rebalance_date=raw_document.get('last_rebalance_date'),
+            version=raw_document.get('version', 1),
+        )
