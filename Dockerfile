@@ -20,7 +20,8 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8088 \
     HOST=0.0.0.0 \
     CORS_ORIGINS="*" \
-    LOG_LEVEL=DEBUG
+    LOG_LEVEL=DEBUG \
+    GUNICORN_WORKERS=1
 
 # Install system dependencies required for both architectures
 RUN apt-get update && apt-get install -y --no-install-recommends \

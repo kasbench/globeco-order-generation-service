@@ -9,6 +9,7 @@ This module provides comprehensive monitoring capabilities including:
 - Error monitoring
 """
 
+import os
 import time
 from typing import Any, Callable, Dict
 
@@ -17,13 +18,32 @@ from fastapi import Request, Response
 # OpenTelemetry metrics imports
 from opentelemetry import metrics as otel_metrics
 from opentelemetry.metrics import get_meter
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+    multiprocess,
+)
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.core.utils import get_logger
 
 logger = get_logger(__name__)
+
+# Configure Prometheus for multiprocess mode if running with multiple workers
+if os.environ.get('prometheus_multiproc_dir'):
+    # Use multiprocess registry for Gunicorn workers
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    logger.info("Prometheus multiprocess mode enabled")
+else:
+    # Use default registry for single process
+    from prometheus_client import REGISTRY as registry
+
+    logger.info("Prometheus single process mode")
 
 # Get OpenTelemetry meter for creating metrics
 meter = get_meter(__name__)
@@ -62,17 +82,20 @@ def _get_or_create_metric(
         return _METRICS_REGISTRY[registry_key]
 
     try:
+        # Pass the registry to the metric constructor for multiprocess support
         if labels:
-            metric = metric_class(name, description, labels, **kwargs)
+            metric = metric_class(
+                name, description, labels, registry=registry, **kwargs
+            )
         else:
-            metric = metric_class(name, description, **kwargs)
+            metric = metric_class(name, description, registry=registry, **kwargs)
 
         _METRICS_REGISTRY[registry_key] = metric
         logger.debug(f"Created new metric: {name}")
         return metric
 
     except ValueError as e:
-        if "Duplicated timeseries" in str(e):
+        if "Duplicated timeseries" in str(e) or "already registered" in str(e).lower():
             logger.warning(
                 f"Metric {name} already registered in Prometheus, but not in our registry. This indicates a module reload issue."
             )
@@ -1478,6 +1501,19 @@ def setup_monitoring(app) -> Instrumentator:
     logger.info("Monitoring and observability setup complete")
 
     return instrumentator
+
+
+def cleanup_multiprocess_metrics():
+    """Clean up multiprocess metrics directory on worker shutdown."""
+    multiproc_dir = os.environ.get('prometheus_multiproc_dir')
+    if multiproc_dir and os.path.exists(multiproc_dir):
+        try:
+            import shutil
+
+            shutil.rmtree(multiproc_dir)
+            logger.info("Cleaned up multiprocess metrics directory")
+        except Exception as e:
+            logger.error(f"Failed to clean up multiprocess metrics directory: {e}")
 
 
 def get_health_metrics() -> Dict[str, Any]:

@@ -37,6 +37,7 @@ class DatabaseManager:
         Raises:
             DatabaseConnectionError: If connection fails
         """
+
         # Prevent multiple concurrent initialization attempts
         if self._initialization_in_progress:
             logger.info("Database initialization already in progress, waiting...")

@@ -6,6 +6,7 @@ Order Generation Service. It sets up the application with all necessary middlewa
 routers, and configuration.
 """
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -44,7 +45,11 @@ from src.api.routers.models import router as models_router
 from src.api.routers.rebalance import router as rebalance_router
 from src.api.routers.rebalances import router as rebalances_router
 from src.config import get_settings
-from src.core.monitoring import EnhancedHTTPMetricsMiddleware, setup_monitoring
+from src.core.monitoring import (
+    EnhancedHTTPMetricsMiddleware,
+    cleanup_multiprocess_metrics,
+    setup_monitoring,
+)
 from src.core.security import SecurityHeaders
 from src.core.utils import (
     configure_structured_logging,
@@ -127,7 +132,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """
     settings = get_settings()
     logger.info(
-        "Starting application", service=settings.service_name, version=settings.version
+        "Starting application",
+        service=settings.service_name,
+        version=settings.version,
+        process_id=os.getpid(),
+        prometheus_multiproc_dir=os.environ.get('prometheus_multiproc_dir', 'not_set'),
     )
 
     # Startup logic
@@ -158,6 +167,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from src.infrastructure.database.database import close_database
 
     await close_database()
+
+    # Clean up multiprocess metrics if enabled
+    cleanup_multiprocess_metrics()
+
     # External service clients are HTTP-based and don't require explicit cleanup
     # The dependency injection system handles their lifecycle automatically
     logger.info("Application shutdown completed")
@@ -275,7 +288,9 @@ def create_app() -> FastAPI:
         """Prometheus metrics endpoint."""
         from fastapi import Response
 
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+        from src.core.monitoring import registry
+
+        return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
     # CORS middleware (first in stack)
     app.add_middleware(
