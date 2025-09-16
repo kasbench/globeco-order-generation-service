@@ -17,10 +17,9 @@ echo "Log Level: $UVICORN_LOG_LEVEL"
 #      --no-use-colors
 
 exec /app/.venv/bin/gunicorn \
-     -w 4 \
+     -w 1 \
      -k uvicorn.workers.UvicornWorker \
      -b 0.0.0.0:8088 \
-     --threads 1 \
      --log-level "$UVICORN_LOG_LEVEL" \
      --access-logfile - \
      --error-logfile - \
