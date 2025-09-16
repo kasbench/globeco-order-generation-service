@@ -33,20 +33,53 @@ logger = logging.getLogger(__name__)
 class MongoRebalanceRepository(RebalanceRepository):
     """MongoDB implementation of the Rebalance Repository using Beanie ODM."""
 
-    def _is_beanie_initialized(self) -> bool:
-        """Check if Beanie ODM is properly initialized for RebalanceDocument."""
+    async def _get_collection_safely(self):
+        """
+        Safely get the motor collection with fallback methods.
+
+        This method handles the specific 'get_motor_collection' error by trying
+        multiple approaches to access the collection.
+        """
+        # Method 1: Try standard Beanie get_motor_collection
         try:
-            # Check if database manager is initialized first
+            collection = RebalanceDocument.get_motor_collection()
+            if collection is not None:
+                return collection, "beanie_motor"
+        except (CollectionWasNotInitialized, AttributeError, RuntimeError) as e:
+            logger.debug(f"get_motor_collection failed: {type(e).__name__}")
+
+        # Method 2: Try direct database access
+        try:
             from src.infrastructure.database.database import db_manager
 
-            if not db_manager.is_connected:
-                return False
+            if db_manager.database is not None:
+                collection = db_manager.database[
+                    "rebalances"
+                ]  # Collection name from RebalanceDocument.Settings
+                return collection, "direct_db"
+        except Exception as e:
+            logger.debug(f"Direct database access failed: {type(e).__name__}")
 
-            # Try to access the motor collection to verify initialization
+        # Method 3: Try to re-initialize Beanie and retry
+        try:
+            from src.infrastructure.database.database import db_manager
+
+            logger.info(
+                "Attempting to re-initialize Beanie ODM due to collection access failure"
+            )
+            await db_manager.ensure_beanie_initialized()
             collection = RebalanceDocument.get_motor_collection()
-            return collection is not None
-        except (CollectionWasNotInitialized, AttributeError, RuntimeError):
-            return False
+            if collection is not None:
+                return collection, "beanie_motor_after_reinit"
+        except Exception as e:
+            logger.warning(f"Beanie re-initialization failed: {type(e).__name__}")
+
+        # If all methods fail, raise an error
+        raise RepositoryError(
+            "Unable to access rebalances collection through any method. "
+            "This indicates a serious database initialization issue.",
+            operation="get_collection",
+        )
 
     def _convert_decimal128_to_decimal(self, value):
         """Convert Decimal128 to Python Decimal, or return value if already correct type."""
@@ -244,9 +277,6 @@ class MongoRebalanceRepository(RebalanceRepository):
             logger.debug(
                 f"Repository.get_by_id(): Starting retrieval for rebalance_id={rebalance_id}"
             )
-            logger.debug(
-                f"Repository.get_by_id(): Beanie initialized: {self._is_beanie_initialized()}"
-            )
 
             # Validate ObjectId format
             if not ObjectId.is_valid(rebalance_id):
@@ -263,90 +293,18 @@ class MongoRebalanceRepository(RebalanceRepository):
             object_id = ObjectId(rebalance_id)
             logger.debug(f"Repository.get_by_id(): Created ObjectId: {object_id}")
 
-            # Find document by ID using raw MongoDB query to avoid Pydantic validation
+            # Get collection using safe method that handles the get_motor_collection error
+            logger.debug(f"Repository.get_by_id(): Getting collection safely...")
+            collection, access_method = await self._get_collection_safely()
             logger.debug(
-                f"Repository.get_by_id(): Querying database for raw document..."
+                f"Repository.get_by_id(): Using collection access method: {access_method}"
             )
-            # Try to use Beanie's get_motor_collection first, with better error handling
-            raw_document = None
-            collection_method_worked = False
 
-            try:
-                collection = RebalanceDocument.get_motor_collection()
-                raw_document = await collection.find_one({"_id": object_id})
-                collection_method_worked = True
-                logger.debug(
-                    f"Repository.get_by_id(): Raw database query completed successfully, found document: {raw_document is not None}"
-                )
-            except (CollectionWasNotInitialized, AttributeError, RuntimeError) as e:
-                # Check if database is still initializing before logging warning
-                from src.infrastructure.database.database import db_manager
-
-                if db_manager.is_initializing:
-                    logger.debug(
-                        f"Repository.get_by_id(): Beanie ODM still initializing, will try fallback method"
-                    )
-                else:
-                    logger.warning(
-                        f"Repository.get_by_id(): Beanie ODM not properly initialized, falling back to standard method. Error: {str(e)}"
-                    )
-
-                # Try the standard Beanie method as fallback
-                try:
-                    document = await RebalanceDocument.get(object_id)
-                    if document is None:
-                        logger.debug(
-                            f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
-                        )
-                        return None
-
-                    # Convert Beanie document to dictionary and process normally
-                    logger.debug(
-                        f"Repository.get_by_id(): Converting Beanie document to dict..."
-                    )
-                    raw_document = document.model_dump()
-                    logger.debug(
-                        f"Repository.get_by_id(): Successfully retrieved rebalance {rebalance_id} using Beanie fallback method"
-                    )
-                except Exception as fallback_error:
-                    # If both methods fail, try one more approach - direct MongoDB access
-                    logger.debug(
-                        f"Repository.get_by_id(): Standard Beanie method also failed, trying direct MongoDB access"
-                    )
-                    try:
-                        from src.infrastructure.database.database import db_manager
-
-                        if db_manager.database:
-                            # Use the correct collection name from the document settings
-                            collection = db_manager.database["rebalances"]
-                            raw_document = await collection.find_one({"_id": object_id})
-                            if raw_document:
-                                logger.debug(
-                                    f"Repository.get_by_id(): Successfully retrieved document using direct MongoDB access"
-                                )
-                            else:
-                                logger.debug(
-                                    f"Repository.get_by_id(): No document found for rebalance_id={rebalance_id}"
-                                )
-                                return None
-                        else:
-                            raise RuntimeError("Database not available")
-                    except Exception as direct_error:
-                        logger.error(
-                            f"Repository.get_by_id(): All methods failed. Raw error: {str(e)}, Fallback error: {str(fallback_error)}, Direct error: {str(direct_error)}"
-                        )
-                        error_msg = (
-                            f"Database not properly initialized. This may indicate:\n"
-                            f"1. Beanie ODM initialization failed during application startup\n"
-                            f"2. Database connection was lost\n"
-                            f"3. Race condition during application startup\n"
-                            f"Raw method error: {str(e) or 'Unknown error'}\n"
-                            f"Fallback method error: {str(fallback_error) or 'Unknown error'}\n"
-                            f"Direct method error: {str(direct_error) or 'Unknown error'}"
-                        )
-                        raise RepositoryError(
-                            error_msg, operation="get"
-                        ) from direct_error
+            # Query for the document
+            raw_document = await collection.find_one({"_id": object_id})
+            logger.debug(
+                f"Repository.get_by_id(): Query completed, found document: {raw_document is not None}"
+            )
 
             if raw_document is None:
                 logger.debug(

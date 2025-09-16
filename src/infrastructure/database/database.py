@@ -29,6 +29,7 @@ class DatabaseManager:
         self.database: Optional[AsyncIOMotorDatabase] = None
         self._is_initialized = False
         self._initialization_in_progress = False
+        self._initialization_lock = asyncio.Lock()
 
     async def connect(self) -> None:
         """
@@ -37,66 +38,67 @@ class DatabaseManager:
         Raises:
             DatabaseConnectionError: If connection fails
         """
+        async with self._initialization_lock:
+            # Check if already initialized after acquiring lock
+            if self._is_initialized:
+                logger.debug("Database already initialized")
+                return
 
-        # Prevent multiple concurrent initialization attempts
-        if self._initialization_in_progress:
-            logger.info("Database initialization already in progress, waiting...")
-            # Wait for initialization to complete
-            while self._initialization_in_progress and not self._is_initialized:
-                await asyncio.sleep(0.1)
-            return
+            # Prevent multiple concurrent initialization attempts
+            if self._initialization_in_progress:
+                logger.info("Database initialization already in progress, waiting...")
+                # Wait for initialization to complete
+                while self._initialization_in_progress and not self._is_initialized:
+                    await asyncio.sleep(0.1)
+                return
 
-        if self._is_initialized:
-            logger.debug("Database already initialized")
-            return
+            self._initialization_in_progress = True
+            try:
+                settings = get_settings()
+                logger.info("Starting database initialization...")
 
-        self._initialization_in_progress = True
-        try:
-            settings = get_settings()
-            logger.info("Starting database initialization...")
+                # Create MongoDB client
+                self.client = AsyncIOMotorClient(
+                    settings.database_url,
+                    serverSelectionTimeoutMS=settings.database_timeout_ms,
+                    maxPoolSize=settings.database_max_connections,
+                    minPoolSize=settings.database_min_connections,
+                    maxIdleTimeMS=settings.database_idle_timeout_ms,
+                )
 
-            # Create MongoDB client
-            self.client = AsyncIOMotorClient(
-                settings.database_url,
-                serverSelectionTimeoutMS=settings.database_timeout_ms,
-                maxPoolSize=settings.database_max_connections,
-                minPoolSize=settings.database_min_connections,
-                maxIdleTimeMS=settings.database_idle_timeout_ms,
-            )
+                # Test connection
+                await self.client.admin.command('ping')
+                logger.info("Successfully connected to MongoDB")
 
-            # Test connection
-            await self.client.admin.command('ping')
-            logger.info("Successfully connected to MongoDB")
+                # Get database
+                self.database = self.client[settings.database_name]
 
-            # Get database
-            self.database = self.client[settings.database_name]
+                # Initialize Beanie with document models
+                logger.info("Initializing Beanie ODM...")
+                await init_beanie(
+                    database=self.database,
+                    document_models=[ModelDocument, RebalanceDocument],
+                )
 
-            # Initialize Beanie with document models
-            logger.info("Initializing Beanie ODM...")
-            await init_beanie(
-                database=self.database,
-                document_models=[ModelDocument, RebalanceDocument],
-            )
+                self._is_initialized = True
+                logger.info(
+                    f"Database '{settings.database_name}' initialized with Beanie ODM"
+                )
 
-            self._is_initialized = True
-            logger.info(
-                f"Database '{settings.database_name}' initialized with Beanie ODM"
-            )
-
-        except ServerSelectionTimeoutError as e:
-            error_msg = f"Failed to connect to MongoDB: {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseConnectionError(error_msg) from e
-        except ConfigurationError as e:
-            error_msg = f"MongoDB configuration error: {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseConnectionError(error_msg) from e
-        except Exception as e:
-            error_msg = f"Unexpected database connection error: {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseConnectionError(error_msg) from e
-        finally:
-            self._initialization_in_progress = False
+            except ServerSelectionTimeoutError as e:
+                error_msg = f"Failed to connect to MongoDB: {str(e)}"
+                logger.error(error_msg)
+                raise DatabaseConnectionError(error_msg) from e
+            except ConfigurationError as e:
+                error_msg = f"MongoDB configuration error: {str(e)}"
+                logger.error(error_msg)
+                raise DatabaseConnectionError(error_msg) from e
+            except Exception as e:
+                error_msg = f"Unexpected database connection error: {str(e)}"
+                logger.error(error_msg)
+                raise DatabaseConnectionError(error_msg) from e
+            finally:
+                self._initialization_in_progress = False
 
     async def disconnect(self) -> None:
         """Close database connection."""
@@ -173,6 +175,60 @@ class DatabaseManager:
     def is_initializing(self) -> bool:
         """Check if database initialization is in progress."""
         return self._initialization_in_progress
+
+    async def ensure_beanie_initialized(self) -> None:
+        """
+        Ensure Beanie ODM is properly initialized in the current process.
+        This is particularly important for multi-worker deployments where
+        each worker process needs its own Beanie initialization.
+        """
+        if not self._is_initialized:
+            logger.info("Beanie ODM not initialized in this process, initializing...")
+            await self.connect()
+            return
+
+        # Test if Beanie is actually working by trying to access a collection
+        try:
+            from src.models.rebalance import RebalanceDocument
+
+            collection = RebalanceDocument.get_motor_collection()
+            if collection is None:
+                raise RuntimeError("Collection is None")
+
+            # Additional test: try to ping the collection
+            await collection.find_one({}, {"_id": 1})
+            logger.debug("Beanie ODM verification successful")
+
+        except Exception as e:
+            logger.warning(
+                f"Beanie ODM appears to be broken in this process (error: {type(e).__name__}: {e}), re-initializing..."
+            )
+            # Reset state and re-initialize
+            self._is_initialized = False
+            self._initialization_in_progress = False
+
+            # Close existing connections
+            if self.client:
+                self.client.close()
+                self.client = None
+                self.database = None
+
+            # Re-initialize
+            await self.connect()
+
+            # Verify the re-initialization worked
+            try:
+                from src.models.rebalance import RebalanceDocument
+
+                collection = RebalanceDocument.get_motor_collection()
+                if collection is None:
+                    raise RuntimeError(
+                        "Collection is still None after re-initialization"
+                    )
+                logger.info("Beanie ODM re-initialization successful")
+            except Exception as verify_error:
+                logger.error(f"Beanie ODM re-initialization failed: {verify_error}")
+                raise
 
 
 # Global database manager instance

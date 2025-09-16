@@ -8,9 +8,9 @@ echo "Starting GlobeCo Order Generation Service..."
 echo "Port: ${PORT:-8088}"
 echo "Log Level: $UVICORN_LOG_LEVEL"
 
-# Determine number of workers (default to 1 for consistent metrics)
-# Force to 1 worker to avoid metrics duplication until multiprocess is properly configured
-WORKERS=4
+# Determine number of workers (default to 4)
+WORKERS=${WORKERS:-4}
+echo "Workers: $WORKERS"
 
 # Configure Prometheus multiprocess mode if using multiple workers
 if [ "$WORKERS" -gt 1 ]; then
@@ -23,7 +23,7 @@ else
     echo "Using single worker mode - no multiprocess configuration needed"
 fi
 
-# Start with Gunicorn
+# Start with Gunicorn using inline configuration
 exec /app/.venv/bin/gunicorn \
      -w "$WORKERS" \
      -k uvicorn.workers.UvicornWorker \
@@ -32,4 +32,7 @@ exec /app/.venv/bin/gunicorn \
      --access-logfile - \
      --error-logfile - \
      --preload \
+     --timeout 30 \
+     --max-requests 1000 \
+     --max-requests-jitter 50 \
      src.main:app

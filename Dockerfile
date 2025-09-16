@@ -109,6 +109,7 @@ FROM dependencies AS builder
 # Copy source code
 COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser pyproject.toml ./
+COPY --chown=appuser:appuser gunicorn_config.py ./
 
 # Pre-compile Python bytecode for faster startup
 RUN /app/.venv/bin/python -m compileall -b src/
@@ -116,7 +117,8 @@ RUN /app/.venv/bin/python -m compileall -b src/
 # Create optimized application directory
 RUN mkdir -p /app/dist && \
     cp -r src/ /app/dist/ && \
-    cp pyproject.toml /app/dist/
+    cp pyproject.toml /app/dist/ && \
+    cp gunicorn_config.py /app/dist/
 
 # ===================================================================
 # Production Stage: Minimal runtime image
@@ -141,8 +143,9 @@ RUN find /app/.venv/bin -type f -executable -exec chmod +x {} \; && \
 # Copy optimized application from builder
 COPY --from=builder --chown=appuser:appuser /app/dist /app
 
-# Copy startup script
+# Copy startup script and gunicorn config
 COPY --chown=appuser:appuser scripts/start-production.sh /app/
+COPY --chown=appuser:appuser gunicorn_config.py /app/
 RUN chmod +x /app/start-production.sh
 
 # Create required directories
