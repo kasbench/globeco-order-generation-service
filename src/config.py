@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         default=5000, description="Database connection timeout in milliseconds"
     )
     database_max_connections: int = Field(
-        default=50, description="Maximum database connections in pool"
+        default=100, description="Maximum database connections in pool"
     )
     database_min_connections: int = Field(
         default=10, description="Minimum database connections in pool"
