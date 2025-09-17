@@ -149,8 +149,10 @@ COPY --chown=appuser:appuser gunicorn_config.py /app/
 RUN chmod +x /app/start-production.sh
 
 # Create required directories
-RUN mkdir -p /app/logs /app/data && \
-    chown -R appuser:appuser /app/logs /app/data
+RUN mkdir -p /app/logs /app/data /tmp/prometheus_multiproc_dir && \
+    chown -R appuser:appuser /app/logs /app/data && \
+    chmod 755 /tmp/prometheus_multiproc_dir && \
+    chown appuser:appuser /tmp/prometheus_multiproc_dir
 
 # Switch to non-root user
 USER appuser

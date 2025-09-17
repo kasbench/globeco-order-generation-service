@@ -38,6 +38,17 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+# Configure Prometheus multiprocess mode BEFORE importing monitoring module
+# This must happen before prometheus_client is imported anywhere
+_prometheus_multiproc_dir = os.environ.get('prometheus_multiproc_dir')
+if _prometheus_multiproc_dir and not os.path.exists(_prometheus_multiproc_dir):
+    try:
+        os.makedirs(_prometheus_multiproc_dir, exist_ok=True)
+        os.chmod(_prometheus_multiproc_dir, 0o755)
+    except Exception:
+        pass  # Will be handled by monitoring module
+
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.api.routers.health import router as health_router

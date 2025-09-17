@@ -34,11 +34,36 @@ from src.core.utils import get_logger
 logger = get_logger(__name__)
 
 # Configure Prometheus for multiprocess mode if running with multiple workers
-if os.environ.get('prometheus_multiproc_dir'):
-    # Use multiprocess registry for Gunicorn workers
-    registry = CollectorRegistry()
-    multiprocess.MultiProcessCollector(registry)
-    logger.info("Prometheus multiprocess mode enabled")
+prometheus_multiproc_dir = os.environ.get('prometheus_multiproc_dir')
+if prometheus_multiproc_dir:
+    try:
+        # Verify the directory exists and is writable
+        if not os.path.exists(prometheus_multiproc_dir):
+            os.makedirs(prometheus_multiproc_dir, exist_ok=True)
+            logger.info(
+                f"Created Prometheus multiprocess directory: {prometheus_multiproc_dir}"
+            )
+
+        # Test write access
+        test_file = os.path.join(prometheus_multiproc_dir, "test_access")
+        try:
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+        except Exception as e:
+            logger.error(f"Prometheus multiprocess directory not writable: {e}")
+            raise
+
+        # Use multiprocess registry for Gunicorn workers
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        logger.info(
+            f"Prometheus multiprocess mode enabled with directory: {prometheus_multiproc_dir}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize Prometheus multiprocess mode: {e}")
+        logger.info("Falling back to single process mode")
+        from prometheus_client import REGISTRY as registry
 else:
     # Use default registry for single process
     from prometheus_client import REGISTRY as registry

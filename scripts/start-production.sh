@@ -16,11 +16,19 @@ echo "Workers: $WORKERS"
 if [ "$WORKERS" -gt 1 ]; then
     echo "Configuring Prometheus multiprocess mode for $WORKERS workers"
     export prometheus_multiproc_dir="/tmp/prometheus_multiproc_dir"
+
+    # Create directory with proper permissions
     mkdir -p "$prometheus_multiproc_dir"
-    # Clean up any existing metrics files
-    rm -rf "$prometheus_multiproc_dir"/*
+    chmod 755 "$prometheus_multiproc_dir"
+
+    # Clean up any existing metrics files (but keep the directory)
+    find "$prometheus_multiproc_dir" -name "*.db" -type f -delete 2>/dev/null || true
+
+    echo "Prometheus multiprocess directory configured at: $prometheus_multiproc_dir"
 else
     echo "Using single worker mode - no multiprocess configuration needed"
+    # Ensure the environment variable is not set for single worker mode
+    unset prometheus_multiproc_dir
 fi
 
 # Start with Gunicorn using inline configuration
