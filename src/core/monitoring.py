@@ -19,12 +19,17 @@ from fastapi import Request, Response
 from opentelemetry import metrics as otel_metrics
 from opentelemetry.metrics import get_meter
 from prometheus_client import (
+    GC_COLLECTOR,
+    PLATFORM_COLLECTOR,
+    PROCESS_COLLECTOR,
+    REGISTRY,
     CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
     generate_latest,
     multiprocess,
+    start_http_server,
 )
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -54,20 +59,32 @@ if prometheus_multiproc_dir:
             logger.error(f"Prometheus multiprocess directory not writable: {e}")
             raise
 
-        # Use multiprocess registry for Gunicorn workers
+        # Create a custom registry that combines multiprocess and process metrics
         registry = CollectorRegistry()
+
+        # Add multiprocess collector for application metrics
         multiprocess.MultiProcessCollector(registry)
+
+        # For multiprocess mode, we need to ensure process metrics are collected
+        # The issue might be that the default collectors don't work in multiprocess mode
+        # Let's create our own process metrics using psutil
+        logger.info("Setting up process metrics for multiprocess mode")
+
+        # We'll rely on our custom process metrics and the default collectors
+        # The MultiProcessCollector should handle the application metrics
+        # and we'll add process metrics through our health metrics system
+
         logger.info(
             f"Prometheus multiprocess mode enabled with directory: {prometheus_multiproc_dir}"
         )
+        logger.info("Multiprocess and process collectors configured")
     except Exception as e:
         logger.error(f"Failed to initialize Prometheus multiprocess mode: {e}")
         logger.info("Falling back to single process mode")
-        from prometheus_client import REGISTRY as registry
+        registry = REGISTRY
 else:
-    # Use default registry for single process
-    from prometheus_client import REGISTRY as registry
-
+    # Use default registry for single process (includes default collectors automatically)
+    registry = REGISTRY
     logger.info("Prometheus single process mode")
 
 # Get OpenTelemetry meter for creating metrics
@@ -79,7 +96,7 @@ otel_http_requests_total = meter.create_counter(
 )
 
 otel_http_request_duration = meter.create_histogram(
-    name="http_request_duration",
+    name="http_request_duration_milliseconds",
     description="HTTP request duration in milliseconds",
     unit="ms",
 )
@@ -87,6 +104,74 @@ otel_http_request_duration = meter.create_histogram(
 otel_http_requests_in_flight = meter.create_up_down_counter(
     name="http_requests_in_flight",
     description="Number of HTTP requests currently being processed",
+    unit="1",
+)
+
+# OpenTelemetry Process metrics (sent to OTEL Collector)
+otel_process_cpu_seconds_total = meter.create_counter(
+    name="process_cpu_seconds_total",
+    description="Total user and system CPU time spent in seconds",
+    unit="s",
+)
+
+otel_process_resident_memory_bytes = meter.create_up_down_counter(
+    name="process_resident_memory_bytes",
+    description="Resident memory size in bytes",
+    unit="By",
+)
+
+otel_process_virtual_memory_bytes = meter.create_up_down_counter(
+    name="process_virtual_memory_bytes",
+    description="Virtual memory size in bytes",
+    unit="By",
+)
+
+otel_process_open_fds = meter.create_up_down_counter(
+    name="process_open_fds",
+    description="Number of open file descriptors",
+    unit="1",
+)
+
+otel_process_max_fds = meter.create_up_down_counter(
+    name="process_max_fds",
+    description="Maximum number of open file descriptors",
+    unit="1",
+)
+
+otel_process_start_time_seconds = meter.create_up_down_counter(
+    name="process_start_time_seconds",
+    description="Start time of the process since unix epoch in seconds",
+    unit="s",
+)
+
+# OpenTelemetry Python metrics (sent to OTEL Collector)
+otel_python_info = meter.create_up_down_counter(
+    name="python_info",
+    description="Python platform information",
+    unit="1",
+)
+
+otel_python_threads = meter.create_up_down_counter(
+    name="python_threads",
+    description="Number of Python threads",
+    unit="1",
+)
+
+otel_python_gc_collections_total = meter.create_counter(
+    name="python_gc_collections_total",
+    description="Number of times this generation was collected",
+    unit="1",
+)
+
+otel_python_gc_objects_collected_total = meter.create_counter(
+    name="python_gc_objects_collected_total",
+    description="Objects collected during gc",
+    unit="1",
+)
+
+otel_python_gc_objects_uncollectable_total = meter.create_counter(
+    name="python_gc_objects_uncollectable_total",
+    description="Uncollectable object found during GC",
     unit="1",
 )
 
@@ -161,7 +246,7 @@ HTTP_REQUESTS_TOTAL = _get_or_create_metric(
 
 HTTP_REQUEST_DURATION = _get_or_create_metric(
     Histogram,
-    'http_request_duration',
+    'http_request_duration_milliseconds',
     'HTTP request duration in milliseconds',
     ['method', 'path', 'status'],
     buckets=[5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
@@ -226,6 +311,48 @@ CPU_USAGE = _get_or_create_metric(
     Gauge, 'cpu_usage_percent', 'Current CPU usage percentage'
 )
 
+# Custom process metrics using psutil (since default ProcessCollector may not work in multiprocess mode)
+PROCESS_CPU_SECONDS_TOTAL = _get_or_create_metric(
+    Counter,
+    'process_cpu_seconds_total',
+    'Total user and system CPU time spent in seconds',
+)
+
+PROCESS_RESIDENT_MEMORY_BYTES = _get_or_create_metric(
+    Gauge, 'process_resident_memory_bytes', 'Resident memory size in bytes'
+)
+
+PROCESS_VIRTUAL_MEMORY_BYTES = _get_or_create_metric(
+    Gauge, 'process_virtual_memory_bytes', 'Virtual memory size in bytes'
+)
+
+PROCESS_OPEN_FDS = _get_or_create_metric(
+    Gauge, 'process_open_fds', 'Number of open file descriptors'
+)
+
+PROCESS_MAX_FDS = _get_or_create_metric(
+    Gauge, 'process_max_fds', 'Maximum number of open file descriptors'
+)
+
+PROCESS_START_TIME_SECONDS = _get_or_create_metric(
+    Gauge,
+    'process_start_time_seconds',
+    'Start time of the process since unix epoch in seconds',
+)
+
+# Python info metric (static)
+PYTHON_INFO = _get_or_create_metric(
+    Gauge,
+    'python_info',
+    'Python platform information',
+    ['version', 'implementation', 'major', 'minor', 'patchlevel'],
+)
+
+# Python threads metric
+PYTHON_THREADS = _get_or_create_metric(
+    Gauge, 'python_threads', 'Number of Python threads'
+)
+
 
 class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
     """
@@ -249,6 +376,19 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         """
         # Start high-precision timing using perf_counter for millisecond precision
         start_time = time.perf_counter()
+
+        # Update process metrics periodically (every 100 requests to avoid overhead)
+        if hasattr(self, '_request_count'):
+            self._request_count += 1
+        else:
+            self._request_count = 1
+
+        if self._request_count % 100 == 0:
+            try:
+                update_process_metrics()  # For Prometheus /metrics endpoint
+                update_otel_process_metrics()  # For OpenTelemetry Collector
+            except Exception as e:
+                logger.debug(f"Failed to update process metrics: {e}")
 
         # Increment in-flight requests gauge (both OTEL and Prometheus)
         in_flight_incremented = False
@@ -1499,6 +1639,13 @@ def setup_monitoring(app) -> Instrumentator:
         logger.info("Metrics disabled, skipping monitoring setup")
         return None
 
+    # Ensure process metrics are available in multiprocess mode
+    prometheus_multiproc_dir = os.environ.get('prometheus_multiproc_dir')
+    if prometheus_multiproc_dir:
+        logger.info("Process metrics enabled for multiprocess mode")
+    else:
+        logger.info("Process metrics enabled for single process mode")
+
     # Create instrumentator
     instrumentator = Instrumentator(
         should_group_status_codes=False,
@@ -1523,8 +1670,24 @@ def setup_monitoring(app) -> Instrumentator:
     # Instrument the app
     instrumentator.instrument(app)
 
-    logger.info("Monitoring and observability setup complete")
+    # Initialize process metrics
+    update_process_metrics()  # For Prometheus /metrics endpoint
+    update_otel_process_metrics()  # For OpenTelemetry Collector
 
+    # Debug registry information
+    debug_registry_collectors()
+
+    # Verify process metrics are available
+    if verify_process_metrics_available():
+        logger.info("Monitoring and observability setup complete with process metrics")
+    else:
+        logger.warning(
+            "Monitoring setup complete but some process metrics may be missing"
+        )
+
+    logger.info(
+        "OpenTelemetry process metrics initialized and will be sent to OTEL Collector"
+    )
     return instrumentator
 
 
@@ -1575,3 +1738,342 @@ def get_health_metrics() -> Dict[str, Any]:
             "http_requests_in_flight": HTTP_REQUESTS_IN_FLIGHT._value._value,
             "error": str(e),
         }
+
+
+def verify_process_metrics_available() -> bool:
+    """
+    Verify that process metrics are available in the registry.
+
+    Returns:
+        True if process metrics are available, False otherwise
+    """
+    try:
+        metrics_output = generate_latest(registry).decode('utf-8')
+
+        # Check for key process and HTTP metrics
+        required_metrics = [
+            # Process metrics
+            'process_cpu_seconds_total',
+            'process_resident_memory_bytes',
+            'process_virtual_memory_bytes',
+            'process_open_fds',
+            'process_max_fds',
+            'process_start_time_seconds',
+            # Python metrics
+            'python_info',
+            'python_gc_objects_collected_total',
+            'python_gc_collections_total',
+            'python_threads',
+            # HTTP metrics
+            'http_request_duration_milliseconds_bucket',
+            'http_request_duration_milliseconds_count',
+            'http_request_duration_milliseconds_sum',
+            'http_requests_in_flight',
+            'http_requests_total',
+        ]
+
+        available_metrics = []
+        missing_metrics = []
+
+        for metric in required_metrics:
+            if metric in metrics_output:
+                available_metrics.append(metric)
+            else:
+                missing_metrics.append(metric)
+
+        # Log all available metrics for debugging
+        all_metric_names = []
+        for line in metrics_output.split('\n'):
+            if line.startswith('#') or not line.strip():
+                continue
+            if '{' in line:
+                metric_name = line.split('{')[0]
+            else:
+                metric_name = line.split(' ')[0] if ' ' in line else line
+            if metric_name and metric_name not in all_metric_names:
+                all_metric_names.append(metric_name)
+
+        logger.debug(
+            "Available metrics in registry",
+            total_metrics=len(all_metric_names),
+            sample_metrics=all_metric_names[:10],  # Show first 10 for debugging
+        )
+
+        if missing_metrics:
+            logger.warning(
+                "Some process metrics are missing",
+                missing=missing_metrics,
+                available=available_metrics,
+                multiprocess_mode=bool(os.environ.get('prometheus_multiproc_dir')),
+            )
+            return False
+        else:
+            logger.info(
+                "All process metrics are available",
+                available_count=len(available_metrics),
+                multiprocess_mode=bool(os.environ.get('prometheus_multiproc_dir')),
+            )
+            return True
+
+    except Exception as e:
+        logger.error(
+            "Failed to verify process metrics",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        return False
+
+
+def update_process_metrics():
+    """
+    Update process metrics using psutil.
+    This ensures we have process metrics even when the default ProcessCollector doesn't work.
+    """
+    try:
+        import platform
+        import sys
+
+        import psutil
+
+        # Get current process
+        process = psutil.Process()
+
+        # CPU metrics
+        cpu_times = process.cpu_times()
+        total_cpu_time = cpu_times.user + cpu_times.system
+        PROCESS_CPU_SECONDS_TOTAL._value._value = total_cpu_time
+
+        # Memory metrics
+        memory_info = process.memory_info()
+        PROCESS_RESIDENT_MEMORY_BYTES.set(memory_info.rss)
+        PROCESS_VIRTUAL_MEMORY_BYTES.set(memory_info.vms)
+
+        # File descriptor metrics (Unix only)
+        try:
+            if hasattr(process, 'num_fds'):
+                PROCESS_OPEN_FDS.set(process.num_fds())
+
+            # Get max FDs from system limits
+            import resource
+
+            max_fds = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+            if max_fds != resource.RLIM_INFINITY:
+                PROCESS_MAX_FDS.set(max_fds)
+        except (AttributeError, OSError):
+            # Not available on this platform
+            pass
+
+        # Process start time
+        PROCESS_START_TIME_SECONDS.set(process.create_time())
+
+        # Python info (set once)
+        try:
+            if hasattr(PYTHON_INFO, '_value') and PYTHON_INFO._value._value == 0:
+                version_info = sys.version_info
+                PYTHON_INFO.labels(
+                    version=platform.python_version(),
+                    implementation=platform.python_implementation(),
+                    major=str(version_info.major),
+                    minor=str(version_info.minor),
+                    patchlevel=str(version_info.micro),
+                ).set(1)
+        except AttributeError:
+            # PYTHON_INFO is a dummy metric, skip setting it
+            pass
+
+        # Python threads count
+        import threading
+
+        PYTHON_THREADS.set(threading.active_count())
+
+        logger.debug("Process metrics updated successfully")
+
+    except ImportError:
+        logger.warning("psutil not available for process metrics")
+    except Exception as e:
+        logger.error(
+            "Failed to update process metrics",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+
+def update_otel_process_metrics():
+    """
+    Update OpenTelemetry process metrics using psutil.
+    These metrics will be sent to the OTEL Collector and then to Prometheus.
+    """
+    try:
+        import gc
+        import platform
+        import sys
+        import threading
+
+        import psutil
+
+        # Get current process
+        process = psutil.Process()
+
+        # CPU metrics - use add() for counters to set absolute values
+        cpu_times = process.cpu_times()
+        total_cpu_time = cpu_times.user + cpu_times.system
+
+        # For counters, we need to track the previous value and only add the difference
+        if not hasattr(update_otel_process_metrics, '_last_cpu_time'):
+            update_otel_process_metrics._last_cpu_time = 0
+
+        cpu_diff = total_cpu_time - update_otel_process_metrics._last_cpu_time
+        if cpu_diff > 0:
+            otel_process_cpu_seconds_total.add(cpu_diff)
+            update_otel_process_metrics._last_cpu_time = total_cpu_time
+
+        # Memory metrics - use add() with current value for up-down counters
+        memory_info = process.memory_info()
+
+        # For up-down counters, we need to track previous values and add the difference
+        if not hasattr(update_otel_process_metrics, '_last_rss'):
+            update_otel_process_metrics._last_rss = 0
+            update_otel_process_metrics._last_vms = 0
+
+        rss_diff = memory_info.rss - update_otel_process_metrics._last_rss
+        vms_diff = memory_info.vms - update_otel_process_metrics._last_vms
+
+        if rss_diff != 0:
+            otel_process_resident_memory_bytes.add(rss_diff)
+            update_otel_process_metrics._last_rss = memory_info.rss
+
+        if vms_diff != 0:
+            otel_process_virtual_memory_bytes.add(vms_diff)
+            update_otel_process_metrics._last_vms = memory_info.vms
+
+        # File descriptor metrics (Unix only)
+        try:
+            if hasattr(process, 'num_fds'):
+                current_fds = process.num_fds()
+                if not hasattr(update_otel_process_metrics, '_last_fds'):
+                    update_otel_process_metrics._last_fds = 0
+
+                fds_diff = current_fds - update_otel_process_metrics._last_fds
+                if fds_diff != 0:
+                    otel_process_open_fds.add(fds_diff)
+                    update_otel_process_metrics._last_fds = current_fds
+
+            # Get max FDs from system limits
+            import resource
+
+            max_fds = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+            if max_fds != resource.RLIM_INFINITY:
+                if not hasattr(update_otel_process_metrics, '_last_max_fds'):
+                    update_otel_process_metrics._last_max_fds = 0
+
+                max_fds_diff = max_fds - update_otel_process_metrics._last_max_fds
+                if max_fds_diff != 0:
+                    otel_process_max_fds.add(max_fds_diff)
+                    update_otel_process_metrics._last_max_fds = max_fds
+        except (AttributeError, OSError):
+            # Not available on this platform
+            pass
+
+        # Process start time (set once)
+        if not hasattr(update_otel_process_metrics, '_start_time_set'):
+            start_time = process.create_time()
+            otel_process_start_time_seconds.add(start_time)
+            update_otel_process_metrics._start_time_set = True
+
+        # Python info (set once)
+        if not hasattr(update_otel_process_metrics, '_python_info_set'):
+            version_info = sys.version_info
+            attributes = {
+                "version": platform.python_version(),
+                "implementation": platform.python_implementation(),
+                "major": str(version_info.major),
+                "minor": str(version_info.minor),
+                "patchlevel": str(version_info.micro),
+            }
+            otel_python_info.add(1, attributes)
+            update_otel_process_metrics._python_info_set = True
+
+        # Python threads count
+        current_threads = threading.active_count()
+        if not hasattr(update_otel_process_metrics, '_last_threads'):
+            update_otel_process_metrics._last_threads = 0
+
+        threads_diff = current_threads - update_otel_process_metrics._last_threads
+        if threads_diff != 0:
+            otel_python_threads.add(threads_diff)
+            update_otel_process_metrics._last_threads = current_threads
+
+        # GC metrics
+        gc_stats = gc.get_stats()
+        if not hasattr(update_otel_process_metrics, '_last_gc_collections'):
+            update_otel_process_metrics._last_gc_collections = [0, 0, 0]
+            update_otel_process_metrics._last_gc_collected = [0, 0, 0]
+            update_otel_process_metrics._last_gc_uncollectable = [0, 0, 0]
+
+        for i, stats in enumerate(gc_stats):
+            # Collections
+            collections = stats.get('collections', 0)
+            collections_diff = (
+                collections - update_otel_process_metrics._last_gc_collections[i]
+            )
+            if collections_diff > 0:
+                otel_python_gc_collections_total.add(
+                    collections_diff, {"generation": str(i)}
+                )
+                update_otel_process_metrics._last_gc_collections[i] = collections
+
+            # Collected objects
+            collected = stats.get('collected', 0)
+            collected_diff = (
+                collected - update_otel_process_metrics._last_gc_collected[i]
+            )
+            if collected_diff > 0:
+                otel_python_gc_objects_collected_total.add(
+                    collected_diff, {"generation": str(i)}
+                )
+                update_otel_process_metrics._last_gc_collected[i] = collected
+
+            # Uncollectable objects
+            uncollectable = stats.get('uncollectable', 0)
+            uncollectable_diff = (
+                uncollectable - update_otel_process_metrics._last_gc_uncollectable[i]
+            )
+            if uncollectable_diff > 0:
+                otel_python_gc_objects_uncollectable_total.add(
+                    uncollectable_diff, {"generation": str(i)}
+                )
+                update_otel_process_metrics._last_gc_uncollectable[i] = uncollectable
+
+        logger.debug("OpenTelemetry process metrics updated successfully")
+
+    except ImportError:
+        logger.warning("psutil not available for OpenTelemetry process metrics")
+    except Exception as e:
+        logger.error(
+            "Failed to update OpenTelemetry process metrics",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+
+def debug_registry_collectors():
+    """
+    Debug function to log information about registered collectors.
+    """
+    try:
+        logger.debug(
+            "Registry debug info",
+            multiprocess_dir=os.environ.get('prometheus_multiproc_dir'),
+            registry_type=type(registry).__name__,
+        )
+
+        # Try to get collector information
+        if hasattr(registry, '_collector_to_names'):
+            collectors = list(registry._collector_to_names.keys())
+            collector_names = [type(c).__name__ for c in collectors]
+            logger.debug(
+                "Registered collectors", count=len(collectors), types=collector_names
+            )
+
+    except Exception as e:
+        logger.debug("Could not debug registry collectors", error=str(e))

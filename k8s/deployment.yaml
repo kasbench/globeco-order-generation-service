@@ -77,7 +77,7 @@ spec:
                 k8s.namespace.name=$(MY_NAMESPACE)
           resources:
             requests:
-              cpu: "500m"
+              cpu: "2000m"
               memory: "200Mi"
             limits:
               cpu: "2000m"

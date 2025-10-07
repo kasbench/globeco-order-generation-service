@@ -4,7 +4,7 @@
 # ===================================================================
 # Base Stage: Common dependencies and system setup
 # ===================================================================
-FROM python:3.11-slim-bookworm AS base
+FROM python:3.13-slim-bookworm AS base
 
 # Set build arguments for multi-architecture support
 ARG TARGETPLATFORM

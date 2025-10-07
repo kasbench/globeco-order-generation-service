@@ -169,9 +169,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Circuit breaker patterns and retry logic are handled within each client implementation.
     logger.info("External service clients configured via dependency injection")
 
+    # Start background task for process metrics updates
+    import asyncio
+
+    from src.core.monitoring import update_otel_process_metrics
+
+    async def update_metrics_periodically():
+        """Background task to update process metrics every 30 seconds."""
+        while True:
+            try:
+                update_otel_process_metrics()
+                await asyncio.sleep(30)  # Update every 30 seconds
+            except Exception as e:
+                logger.error(
+                    f"Failed to update process metrics in background task: {e}"
+                )
+                await asyncio.sleep(30)  # Continue even if there's an error
+
+    # Start the background task
+    metrics_task = asyncio.create_task(update_metrics_periodically())
+    logger.info("Background process metrics update task started")
+
     logger.info("Application startup completed successfully")
 
     yield
+
+    # Cancel the background task during shutdown
+    metrics_task.cancel()
+    try:
+        await metrics_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("Background process metrics update task stopped")
 
     # Shutdown logic
     logger.info("Shutting down application...")
