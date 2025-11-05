@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
         - name: globeco-order-generation-service
-          image: kasbench/globeco-order-generation-service:latest
-          imagePullPolicy: Always
+          image: kasbench/globeco-order-generation-service:1.0.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8088
           env:
