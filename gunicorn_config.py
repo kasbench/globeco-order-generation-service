@@ -17,7 +17,7 @@ preload_app = True
 
 # Logging configuration
 log_level = os.getenv('LOG_LEVEL', 'INFO').lower()
-access_logfile = "-"
+accesslog = None  # Disable access logs (set to "-" to re-enable)
 error_logfile = "-"
 
 # Worker configuration

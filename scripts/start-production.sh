@@ -17,14 +17,19 @@ if [ "$WORKERS" -gt 1 ]; then
     echo "Configuring Prometheus multiprocess mode for $WORKERS workers"
     export prometheus_multiproc_dir="/tmp/prometheus_multiproc_dir"
 
-    # Create directory with proper permissions
-    mkdir -p "$prometheus_multiproc_dir"
-    chmod 755 "$prometheus_multiproc_dir"
+    # Create directory with proper permissions (ensure it's writable)
+    mkdir -p "$prometheus_multiproc_dir" 2>/dev/null || true
+    chmod 777 "$prometheus_multiproc_dir" 2>/dev/null || true
 
     # Clean up any existing metrics files (but keep the directory)
-    find "$prometheus_multiproc_dir" -name "*.db" -type f -delete 2>/dev/null || true
+    rm -f "$prometheus_multiproc_dir"/*.db 2>/dev/null || true
 
-    echo "Prometheus multiprocess directory configured at: $prometheus_multiproc_dir"
+    # Verify directory is writable
+    if [ -w "$prometheus_multiproc_dir" ]; then
+        echo "Prometheus multiprocess directory configured at: $prometheus_multiproc_dir"
+    else
+        echo "WARNING: Prometheus multiprocess directory is not writable, metrics may fail"
+    fi
 else
     echo "Using single worker mode - no multiprocess configuration needed"
     # Ensure the environment variable is not set for single worker mode
@@ -32,12 +37,12 @@ else
 fi
 
 # Start with Gunicorn using inline configuration
+# Note: Access logs disabled (no --access-logfile) to reduce noise.
 exec /app/.venv/bin/gunicorn \
      -w "$WORKERS" \
      -k uvicorn.workers.UvicornWorker \
      -b 0.0.0.0:${PORT:-8088} \
      --log-level "$UVICORN_LOG_LEVEL" \
-     --access-logfile - \
      --error-logfile - \
      --preload \
      --timeout 30 \
