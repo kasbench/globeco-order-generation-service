@@ -103,8 +103,8 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
                     f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
                 )
                 await self._redis.set(
-                    cache_key, json.dumps(response), ex=600
-                )  # 10-minute TTL
+                    cache_key, json.dumps(response), ex=1440  # Cache for 24 hours
+                )
                 return response
             finally:
                 await lock.release()
