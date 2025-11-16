@@ -75,7 +75,6 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             ExternalServiceError: If security not found or service error
         """
         cache_key = f"security:{security_id}"
-        lock_key = f"lock:{cache_key}"
 
         # Check cache first
         cached_data = await self._redis.get(cache_key)
@@ -83,35 +82,21 @@ class SecurityServiceClient(ExternalServiceClientProtocol):
             logger.debug(f"Cache hit for security {security_id}")
             return json.loads(cached_data)
 
-        # Try to acquire a lock
-        lock = self._redis.lock(lock_key, timeout=10)  # 10-second lock timeout
-        if await lock.acquire(blocking_timeout=5):  # Wait up to 5 seconds for the lock
-            try:
-                # Double-check cache after acquiring the lock
-                cached_data = await self._redis.get(cache_key)
-                if cached_data:
-                    logger.debug(
-                        f"Cache hit for security {security_id} after acquiring lock"
-                    )
-                    return json.loads(cached_data)
+        # Cache miss - fetch from API
+        logger.debug(f"Cache miss for security {security_id}. Fetching...")
+        response = await self._base_client._make_request(
+            "GET", f"/api/v1/security/{security_id}"
+        )
+        logger.debug(
+            f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
+        )
 
-                logger.debug(f"Cache miss for security {security_id}. Fetching...")
-                response = await self._base_client._make_request(
-                    "GET", f"/api/v1/security/{security_id}"
-                )
-                logger.debug(
-                    f"Retrieved security metadata for {security_id}: {response.get('ticker', 'Unknown')}"
-                )
-                await self._redis.set(
-                    cache_key, json.dumps(response), ex=1440  # Cache for 24 hours
-                )
-                return response
-            finally:
-                await lock.release()
-        else:
-            # If we couldn't acquire the lock, wait for the cache to be populated
-            await asyncio.sleep(0.1)
-            return await self.get_security(security_id)
+        # Cache with long TTL since securities rarely change
+        await self._redis.set(
+            cache_key, json.dumps(response), ex=86400  # Cache for 24 hours
+        )
+
+        return response
 
     async def validate_securities(
         self, security_ids: List[str]
