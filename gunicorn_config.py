@@ -11,7 +11,7 @@ import os
 
 # Gunicorn configuration
 bind = f"0.0.0.0:{os.getenv('PORT', '8088')}"
-workers = int(os.getenv('WORKERS', '4'))
+workers = int(os.getenv('WORKERS', '3'))
 worker_class = "uvicorn.workers.UvicornWorker"
 preload_app = True
 
@@ -23,7 +23,7 @@ error_logfile = "-"
 # Worker configuration
 worker_connections = 1000
 max_requests = 1000
-max_requests_jitter = 50
+max_requests_jitter = 200  # Increased to prevent simultaneous worker restarts
 timeout = 30
 keepalive = 2
 
@@ -32,9 +32,12 @@ if workers > 1:
     prometheus_multiproc_dir = "/tmp/prometheus_multiproc_dir"
     os.environ["prometheus_multiproc_dir"] = prometheus_multiproc_dir
 
-    # Create directory with proper permissions
-    os.makedirs(prometheus_multiproc_dir, exist_ok=True)
-    os.chmod(prometheus_multiproc_dir, 0o755)
+    # Directory should already exist from Dockerfile with proper ownership
+    # Just ensure it exists (in case running outside Docker)
+    try:
+        os.makedirs(prometheus_multiproc_dir, mode=0o777, exist_ok=True)
+    except OSError as e:
+        logging.warning(f"Could not create prometheus multiprocess directory: {e}")
 
     # Clean up any existing metrics files at startup
     import glob

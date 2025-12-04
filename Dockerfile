@@ -152,6 +152,13 @@ RUN chmod +x /app/start-production.sh
 RUN mkdir -p /app/logs /app/data && \
     chown -R appuser:appuser /app/logs /app/data
 
+# Create Prometheus multiprocess directory with full permissions
+# This directory is used when running with multiple Gunicorn workers
+# Set ownership to appuser so the startup script can manage it
+RUN mkdir -p /tmp/prometheus_multiproc_dir && \
+    chmod 777 /tmp/prometheus_multiproc_dir && \
+    chown -R appuser:appuser /tmp/prometheus_multiproc_dir
+
 # Switch to non-root user
 USER appuser
 

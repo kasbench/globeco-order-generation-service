@@ -44,19 +44,31 @@ if prometheus_multiproc_dir:
     try:
         # Verify the directory exists and is writable
         if not os.path.exists(prometheus_multiproc_dir):
-            os.makedirs(prometheus_multiproc_dir, exist_ok=True)
+            os.makedirs(prometheus_multiproc_dir, mode=0o777, exist_ok=True)
             logger.info(
                 f"Created Prometheus multiprocess directory: {prometheus_multiproc_dir}"
             )
+        else:
+            # Ensure proper permissions on existing directory
+            try:
+                os.chmod(prometheus_multiproc_dir, 0o777)
+            except OSError as e:
+                logger.warning(
+                    f"Could not set permissions on multiprocess directory: {e}"
+                )
 
-        # Test write access
-        test_file = os.path.join(prometheus_multiproc_dir, "test_access")
+        # Test write access with PID-specific file to avoid conflicts
+        test_file = os.path.join(prometheus_multiproc_dir, f"test_access_{os.getpid()}")
         try:
             with open(test_file, 'w') as f:
                 f.write("test")
             os.remove(test_file)
+            logger.info(f"Verified write access to {prometheus_multiproc_dir}")
         except Exception as e:
             logger.error(f"Prometheus multiprocess directory not writable: {e}")
+            logger.error(
+                f"Directory permissions: {oct(os.stat(prometheus_multiproc_dir).st_mode)[-3:]}"
+            )
             raise
 
         # Create a custom registry that combines multiprocess and process metrics
@@ -79,8 +91,14 @@ if prometheus_multiproc_dir:
         )
         logger.info("Multiprocess and process collectors configured")
     except Exception as e:
-        logger.error(f"Failed to initialize Prometheus multiprocess mode: {e}")
-        logger.info("Falling back to single process mode")
+        logger.error(
+            f"Failed to initialize Prometheus multiprocess mode: {e}", exc_info=True
+        )
+        logger.warning(
+            "Falling back to single process mode - metrics may be incomplete"
+        )
+        # Unset the environment variable to prevent further multiprocess attempts
+        os.environ.pop('prometheus_multiproc_dir', None)
         registry = REGISTRY
 else:
     # Use default registry for single process (includes default collectors automatically)
@@ -393,9 +411,23 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
         # Increment in-flight requests gauge (both OTEL and Prometheus)
         in_flight_incremented = False
         try:
-            HTTP_REQUESTS_IN_FLIGHT.inc()
-            in_flight_incremented = True
-            logger.debug("Successfully incremented Prometheus in-flight requests gauge")
+            # Check if the metric is properly initialized before using it
+            if HTTP_REQUESTS_IN_FLIGHT and hasattr(HTTP_REQUESTS_IN_FLIGHT, 'inc'):
+                HTTP_REQUESTS_IN_FLIGHT.inc()
+                in_flight_incremented = True
+                logger.debug(
+                    "Successfully incremented Prometheus in-flight requests gauge"
+                )
+            else:
+                logger.warning(
+                    "HTTP_REQUESTS_IN_FLIGHT metric not properly initialized"
+                )
+        except (TypeError, AttributeError) as e:
+            logger.error(
+                "Failed to increment Prometheus in-flight requests gauge - metric may not be initialized",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
         except Exception as e:
             logger.error(
                 "Failed to increment Prometheus in-flight requests gauge",
@@ -491,9 +523,18 @@ class EnhancedHTTPMetricsMiddleware(BaseHTTPMiddleware):
             # Only decrement if we successfully incremented to avoid negative values
             if in_flight_incremented:
                 try:
-                    HTTP_REQUESTS_IN_FLIGHT.dec()
-                    logger.debug(
-                        "Successfully decremented Prometheus in-flight requests gauge"
+                    if HTTP_REQUESTS_IN_FLIGHT and hasattr(
+                        HTTP_REQUESTS_IN_FLIGHT, 'dec'
+                    ):
+                        HTTP_REQUESTS_IN_FLIGHT.dec()
+                        logger.debug(
+                            "Successfully decremented Prometheus in-flight requests gauge"
+                        )
+                except (TypeError, AttributeError) as e:
+                    logger.error(
+                        "Failed to decrement Prometheus in-flight requests gauge - metric may not be initialized",
+                        error=str(e),
+                        error_type=type(e).__name__,
                     )
                 except Exception as e:
                     logger.error(
@@ -1838,10 +1879,17 @@ def update_process_metrics():
         # Get current process
         process = psutil.Process()
 
-        # CPU metrics
-        cpu_times = process.cpu_times()
-        total_cpu_time = cpu_times.user + cpu_times.system
-        PROCESS_CPU_SECONDS_TOTAL._value._value = total_cpu_time
+        # CPU metrics - safely update with error handling
+        try:
+            cpu_times = process.cpu_times()
+            total_cpu_time = cpu_times.user + cpu_times.system
+            if (
+                hasattr(PROCESS_CPU_SECONDS_TOTAL, '_value')
+                and PROCESS_CPU_SECONDS_TOTAL._value
+            ):
+                PROCESS_CPU_SECONDS_TOTAL._value._value = total_cpu_time
+        except (AttributeError, TypeError) as e:
+            logger.debug(f"Could not update CPU metrics: {e}")
 
         # Memory metrics
         memory_info = process.memory_info()
