@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: globeco-order-generation-service-mongodb
+  namespace: globeco
+  labels:
+    app: globeco-order-generation-service-mongodb
+spec:
+  ports:
+    - port: 27017
+      targetPort: 27017
+  clusterIP: None  # Headless service for StatefulSet
+  selector:
+    app: globeco-order-generation-service-mongodb
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: order-generation-service-mongodb-pvc
+  namespace: globeco
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: order-generation-service-mongodb
+      type: local
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: globeco-order-generation-service-mongodb
+  namespace: globeco
+spec:
+  serviceName: globeco-order-generation-service-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: globeco-order-generation-service-mongodb
+  template:
+    metadata:
+      labels:
+        app: globeco-order-generation-service-mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:6.0
+          ports:
+            - containerPort: 27017
+          args:
+            - "--profile=2"
+            - "--slowms=0"
+          volumeMounts:
+            - name: mongodb-storage
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "400Mi"
+            limits:
+              cpu: "500m"
+              memory: "2Gi"
+      volumes:
+        - name: mongodb-storage
+          persistentVolumeClaim:
+            claimName: order-generation-service-mongodb-pvc
