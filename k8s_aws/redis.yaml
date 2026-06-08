@@ -31,23 +31,6 @@ data:
     protected-mode no
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: order-generation-service-redis-pvc
-  namespace: globeco
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
-  storageClassName: local-storage
-  selector:
-    matchLabels:
-      app: order-generation-service-redis
-      type: local
----
-apiVersion: v1
 kind: Service
 metadata:
   name: globeco-order-generation-service-redis

@@ -77,11 +77,11 @@ spec:
                 k8s.namespace.name=$(MY_NAMESPACE)
           resources:
             requests:
-              cpu: "2000m"
-              memory: "200Mi"
+              cpu: "1000m"
+              memory: "700Mi"
             limits:
-              cpu: "2000m"
-              memory: "2000Mi"
+              cpu: "1000m"
+              memory: "7000Mi"
           livenessProbe:
             httpGet:
               path: /health/live

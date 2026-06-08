@@ -13,23 +13,6 @@ spec:
   selector:
     app: globeco-order-generation-service-mongodb
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: order-generation-service-mongodb-pvc
-  namespace: globeco
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-  storageClassName: local-storage
-  selector:
-    matchLabels:
-      app: order-generation-service-mongodb
-      type: local
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

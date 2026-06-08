@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: portfolio-service-mongodb-pvc
+  name: order-generation-service-mongodb-pvc
   namespace: globeco
   labels:
-    app: portfolio-service-mongodb
+    app: order-generation-service-mongodb
 spec:
   accessModes:
     - ReadWriteOnce
