@@ -1,0 +1,5 @@
+mongodb-persistent-volume-claim.yaml
+mongodb-deployment.yaml
+redis-persistent-volume-claim.yaml
+redis.yaml
+deployment.yaml
