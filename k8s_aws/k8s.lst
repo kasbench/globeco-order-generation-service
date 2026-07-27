@@ -5,3 +5,4 @@ redis.yaml
 +30
 deployment.yaml
 hpa.yaml
+vpa.yaml
