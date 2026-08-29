@@ -31,7 +31,6 @@ from prometheus_client import (
     multiprocess,
     start_http_server,
 )
-from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.core.utils import get_logger
@@ -1661,15 +1660,18 @@ class SystemMonitor:
             logger.error("Failed to update system metrics", error=str(e))
 
 
-def setup_monitoring(app) -> Instrumentator:
+def setup_monitoring(app) -> bool:
     """
     Setup monitoring and observability for the FastAPI application.
+
+    HTTP request metrics are handled by EnhancedHTTPMetricsMiddleware, so this
+    function only initializes process metrics and performs verification.
 
     Args:
         app: FastAPI application instance
 
     Returns:
-        Configured Instrumentator instance
+        True if monitoring was set up, None if metrics are disabled.
     """
     from src.config import get_settings
 
@@ -1687,29 +1689,13 @@ def setup_monitoring(app) -> Instrumentator:
     else:
         logger.info("Process metrics enabled for single process mode")
 
-    # Create instrumentator
-    instrumentator = Instrumentator(
-        should_group_status_codes=False,
-        should_ignore_untemplated=True,
-        should_respect_env_var=False,  # Use settings instead of env var
-        should_instrument_requests_inprogress=False,  # We use our own in-flight tracking
-        excluded_handlers=[
-            "/metrics"
-        ],  # Only exclude metrics endpoint, let our middleware handle health
-        inprogress_name="http_requests_inprogress",
-        inprogress_labels=True,
-    )
-
-    # Add only non-conflicting metrics
-    # Note: We use our custom EnhancedHTTPMetricsMiddleware for HTTP request metrics
-    # Only add metrics that don't conflict with our custom implementation
-    instrumentator.add(metrics.combined_size())  # Request/response size metrics
-
-    # Remove custom /metrics endpoint registration here
-    # /metrics is now mounted globally in main.py via prometheus_client.make_asgi_app()
-
-    # Instrument the app
-    instrumentator.instrument(app)
+    # NOTE: We intentionally do NOT register the prometheus_fastapi_instrumentator
+    # here. All HTTP request metrics are collected by our own
+    # EnhancedHTTPMetricsMiddleware, which wraps every metric write in
+    # try/except. The instrumentator's built-in metrics (e.g. combined_size)
+    # perform unguarded mmap writes and, in multiprocess mode, can raise
+    # FileNotFoundError that escalates to unhandled 500s in the ASGI stack.
+    # /metrics is mounted globally in main.py via prometheus_client.make_asgi_app().
 
     # Initialize process metrics
     update_process_metrics()  # For Prometheus /metrics endpoint
@@ -1729,20 +1715,35 @@ def setup_monitoring(app) -> Instrumentator:
     logger.info(
         "OpenTelemetry process metrics initialized and will be sent to OTEL Collector"
     )
-    return instrumentator
+    return True
 
 
 def cleanup_multiprocess_metrics():
-    """Clean up multiprocess metrics directory on worker shutdown."""
-    multiproc_dir = os.environ.get('prometheus_multiproc_dir')
-    if multiproc_dir and os.path.exists(multiproc_dir):
-        try:
-            import shutil
+    """Clean up this worker's multiprocess metrics on worker shutdown.
 
-            shutil.rmtree(multiproc_dir)
-            logger.info("Cleaned up multiprocess metrics directory")
-        except Exception as e:
-            logger.error(f"Failed to clean up multiprocess metrics directory: {e}")
+    In Prometheus multiprocess mode the directory pointed to by
+    ``prometheus_multiproc_dir`` is SHARED by all Gunicorn workers. When a
+    single worker exits (e.g. because Gunicorn recycles it via
+    ``--max-requests``), it must only remove ITS OWN ``*_<pid>.db`` files via
+    ``multiprocess.mark_process_dead``. Removing the entire directory here
+    would delete the mmap files still in use by the other live workers,
+    causing ``FileNotFoundError: .../counter_<pid>.db`` on every subsequent
+    request until those workers are themselves recycled.
+    """
+    multiproc_dir = os.environ.get('prometheus_multiproc_dir')
+    if not multiproc_dir:
+        return
+
+    try:
+        # Removes only the exiting worker's per-process db files, leaving the
+        # shared directory and the other workers' files intact.
+        multiprocess.mark_process_dead(os.getpid())
+        logger.info(
+            "Marked worker process dead and cleaned up its Prometheus metrics",
+            pid=os.getpid(),
+        )
+    except Exception as e:
+        logger.error(f"Failed to clean up worker Prometheus metrics: {e}")
 
 
 def get_health_metrics() -> Dict[str, Any]:

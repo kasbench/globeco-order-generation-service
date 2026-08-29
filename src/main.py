@@ -349,8 +349,8 @@ def create_app() -> FastAPI:
 
     # Setup monitoring and observability
     if settings.enable_metrics:
-        instrumentator = setup_monitoring(app)
-        if instrumentator is None:
+        monitoring_ready = setup_monitoring(app)
+        if not monitoring_ready:
             logger.warning("Monitoring setup returned None despite enable_metrics=True")
 
     # Add routers
