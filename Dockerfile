@@ -59,9 +59,14 @@ RUN pip install uv
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install production dependencies in virtual environment using system Python
+# Install production dependencies in virtual environment using system Python.
+# Install from the resolved uv.lock (not pyproject.toml directly) so the image
+# uses the exact, tested dependency versions. Installing from pyproject.toml
+# re-resolves the ">=" ranges at build time, which can silently pull in
+# incompatible major versions (e.g. Beanie 2.x against an older Motor).
 RUN python3 -m venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python --no-cache -r pyproject.toml
+    uv export --frozen --no-emit-project --no-dev --format requirements-txt -o /tmp/requirements.txt && \
+    uv pip install --python /app/.venv/bin/python --no-cache -r /tmp/requirements.txt
 
 # ===================================================================
 # Development Stage: Full development environment

@@ -47,8 +47,10 @@ dependencies = [
     "uvicorn[standard]>=0.24.0",
     "gunicorn>=23.0.0",
     # Database & ODM
-    "motor>=3.0.0",
-    "beanie>=1.29",
+    # Cap beanie below 2.0: Beanie 2.x calls client.append_metadata(), which
+    # requires a newer Motor API and breaks init_beanie against motor 3.7.x.
+    "motor>=3.0.0,<4.0.0",
+    "beanie>=1.29,<2.0",
     "pymongo>=4.6.0",
     # Data Validation & Serialization
     "pydantic>=2.0.0",
