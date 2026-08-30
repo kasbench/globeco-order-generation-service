@@ -8,8 +8,8 @@ echo "Starting GlobeCo Order Generation Service..."
 echo "Port: ${PORT:-8088}"
 echo "Log Level: $UVICORN_LOG_LEVEL"
 
-# Determine number of workers (default to 3)
-WORKERS=${WORKERS:-3}
+# Determine number of workers (default to 1)
+WORKERS=${WORKERS:-1}
 echo "Workers: $WORKERS"
 
 # Configure Prometheus multiprocess mode if using multiple workers
@@ -56,6 +56,4 @@ exec /app/.venv/bin/gunicorn \
      --error-logfile - \
      --preload \
      --timeout 30 \
-     --max-requests 1000 \
-     --max-requests-jitter 200 \
      src.main:app
