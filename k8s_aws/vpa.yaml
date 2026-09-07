@@ -17,7 +17,7 @@ spec:
     containerPolicies:
       - containerName: globeco-order-generation-service
         minAllowed:
-          cpu: 100m
+          cpu: 700m
           memory: 200Mi
         maxAllowed:
           cpu: 2000m
