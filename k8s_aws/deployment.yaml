@@ -6,21 +6,7 @@ metadata:
   labels:
     app: globeco-order-generation-service
 spec:
-  {{- if eq .Values.autoscaler "vpa" }}
-  replicas: 2
-  {{- else if eq .Values.autoscaler "horizontal-2" }}
-  replicas: 2
-  {{- else if eq .Values.autoscaler "horizontal-3" }}
-  replicas: 3
-  {{- else if eq .Values.autoscaler "horizontal-4" }}
-  replicas: 4
-  {{- else if eq .Values.autoscaler "horizontal-5" }}
-  replicas: 5
-  {{- else if eq .Values.autoscaler "horizontal-6" }}
-  replicas: 6
-  {{- else }}
-  replicas: 1
-  {{- end }}
+  {{- include "globeco.replicas" . | nindent 2 }}
 
   # A newly-ready pod must remain ready for 10 seconds before
   # the Deployment considers it available.
@@ -130,24 +116,7 @@ spec:
               restartPolicy: NotRequired
             - resourceName: memory
               restartPolicy: RestartContainer
-          resources:
-            requests:
-              memory: "700Mi"
-              {{- if eq .Values.autoscaler "vertical-2" }}
-              cpu: "883.5m"
-              {{- else if eq .Values.autoscaler "vertical-3" }}
-              cpu: "1178.0m"
-              {{- else if eq .Values.autoscaler "vertical-4" }}
-              cpu: "1472.5m"
-              {{- else if eq .Values.autoscaler "vertical-5" }}
-              cpu: "1767.0m"
-              {{- else if eq .Values.autoscaler "vertical-6" }}
-              cpu: "2061.5m"
-              {{- else }}
-              cpu: "589m"
-              {{- end }}
-            limits:
-              memory: "6000Mi"
+          {{- include "globeco.globecoOrderGenerationServiceResources" . | nindent 10 }}
           livenessProbe:
             httpGet:
               path: /health/live
